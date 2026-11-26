@@ -320,3 +320,20 @@ def test_gen_key_is_usable():
     from app.state import decrypt_text, encrypt_text, generate_key
     k = generate_key()
     assert decrypt_text(encrypt_text("안녕", k), k) == "안녕"
+
+
+def test_pre_brief_catches_up_previous_official_day(calendar_2026, monkeypatch):
+    """마감 작업 때 KRX 자료가 미발표였으면 다음 개장 전 작업이 직전 거래일 자료를 다시 받는다."""
+    from app import jobs
+    from app.services import market_data
+    calls = []
+    monkeypatch.setenv("KRX_API_KEY", "k")
+    monkeypatch.setattr(market_data, "sync_official_daily", lambda db, d: calls.append(d) or {"results": {"x": "ok"}})
+    out = jobs.catch_up_previous_official(calendar_2026, date(2026, 11, 24))
+    assert out["result"] == "synced" and calls == [date(2026, 11, 23)]
+    add_instrument(calendar_2026, "IDX:KOSPI", "코스피", market="INDEX")
+    add_price(calendar_2026, "IDX:KOSPI", date(2026, 11, 23), 250_000, scale=100)
+    calls.clear()
+    assert jobs.catch_up_previous_official(calendar_2026, date(2026, 11, 24))["result"] == "ok" and calls == []
+    monkeypatch.delenv("KRX_API_KEY")
+    assert jobs.catch_up_previous_official(calendar_2026, date(2026, 11, 24))["result"] == "skipped"

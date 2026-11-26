@@ -69,8 +69,30 @@ def release_lock(db: Session, name: str, holder: str = HOLDER) -> None:
 # ---------------------------------------------------------------- 작업 본문
 
 def _job_pre_brief(db: Session, day: date, now: datetime) -> dict:
+    """개장 전 브리핑. 직전 거래일 KRX 공식 자료가 아직 없으면(마감 작업 때 미발표였던 경우) 먼저 다시 받는다."""
     from app.services.briefings import run_pre_brief
-    return run_pre_brief(db, day)
+    out = {"catch_up": catch_up_previous_official(db, day)}
+    db.commit()
+    out.update(run_pre_brief(db, day) or {})
+    return out
+
+
+def catch_up_previous_official(db: Session, day: date) -> dict:
+    from app.config import get_settings
+    from app.services.calendar import CalendarUnknown, previous_trading_day
+    from app.services.market_data import latest_official, sync_official_daily
+    if not get_settings().krx_api_key:
+        return {"result": "skipped", "reason": "KRX_API_KEY 없음"}
+    try:
+        prev = previous_trading_day(db, day)
+    except CalendarUnknown as e:
+        return {"result": "skipped", "reason": f"캘린더 미확인: {e}"}
+    if prev is None:
+        return {"result": "skipped", "reason": "직전 거래일 미확인"}
+    if latest_official(db, "IDX:KOSPI", prev) is not None:
+        return {"result": "ok", "date": prev.isoformat(), "detail": "이미 있음"}
+    summary = sync_official_daily(db, prev)
+    return {"result": "synced", "date": prev.isoformat(), "results": summary["results"]}
 
 
 def _job_close(db: Session, day: date, now: datetime) -> dict:

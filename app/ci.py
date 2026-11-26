@@ -237,13 +237,28 @@ def cmd_local_refresh(args: argparse.Namespace) -> int:
         shutil.copy2(local, backup_dir / f"before-refresh-{stamp}.db")
         kept = copy_rows(local, tmp, LOCAL_ONLY_TABLES)
     from app import db as dbmod
-    dbmod.configure(_sqlite_url(tmp))
     dbmod.engine().dispose()
-    for suffix in ("", "-wal", "-shm"):
-        side = Path(str(local) + suffix)
-        if side.exists():
-            side.unlink()
-    shutil.move(str(tmp), str(local))
+    if local.exists():
+        # 파일을 지우고 바꾸는 대신 SQLite 백업 기능으로 내용을 통째로 덮어쓴다.
+        # Windows에서 웹 화면(run_web)이 DB를 열어 둔 상태여도 동작한다.
+        import sqlite3
+        src = sqlite3.connect(str(tmp))
+        dst = sqlite3.connect(str(local), timeout=60)
+        try:
+            src.backup(dst)
+        except sqlite3.OperationalError as e:
+            print(f"[중단] 내 DB를 갱신하지 못했습니다({e}). 웹 화면 등에서 저장 중일 수 있으니 잠시 뒤 다시 실행하세요. "
+                  "내 DB는 바뀌지 않았습니다.")
+            return 1
+        finally:
+            src.close()
+            dst.close()
+        try:
+            tmp.unlink()
+        except OSError:
+            pass  # 임시 파일은 다음 갱신 때 덮어쓴다(data/ 폴더라 GitHub에 올라가지 않음)
+    else:
+        shutil.move(str(tmp), str(local))
     use_db(local)
     msg = {"result": "ok", "db": local.name, "kept_local_rows": kept}
     if args.prices:

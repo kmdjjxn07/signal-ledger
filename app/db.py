@@ -40,6 +40,8 @@ _SessionLocal: sessionmaker | None = None
 def configure(url: str | None = None) -> None:
     """테스트에서 다른 DB로 바꿀 때도 이 함수를 쓴다."""
     global _engine, _SessionLocal
+    if _engine is not None:
+        _engine.dispose()  # Windows는 열린 연결이 남아 있으면 DB 파일을 옮기거나 지울 수 없다
     _engine = make_engine(url or get_settings().database_url)
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False, future=True)
 

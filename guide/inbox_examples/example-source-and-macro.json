@@ -1,0 +1,13 @@
+{
+  "commands": [
+    {"kind": "source.add", "payload": {
+      "url": "https://example.com/실제-출처-주소로-바꾸세요",
+      "title": "출처 제목", "provider": "제공처", "grade": "A",
+      "checked_at": "2026-11-24T09:00", "ref": "my-source-1"}},
+    {"kind": "macro.revision", "payload": {
+      "quarter_id": "2026Q4", "data_as_of": "2026-11-24", "reason": "수정 이유",
+      "facts": "확인된 사실", "interpretation": "해석", "korea": "", "us": "", "global": "",
+      "transmission": "", "risks": "위험 요인", "next_checks": "다음 확인",
+      "source_ids": "ref:my-source-1"}}
+  ]
+}

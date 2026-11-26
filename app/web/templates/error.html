@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · 시그널 원장{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ title }} <small class="muted">({{ code }})</small></h1>
+  <p>{{ message }}</p>
+  <p><a href="/">오늘의 브리핑으로 돌아가기</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_chip %}
+{% block title %}모의투자 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>모의투자</h1>
+<p class="disclaimer">가상 자금 실험입니다. 실제 주문·차입·공매도·레버리지는 없습니다. 실험마다 현금·포지션·원장이 독립적입니다.</p>
+
+<section class="card">
+  <h2>검증 완료 실험 성과</h2>
+  <p><strong>비용 후 절대수익률 산술평균: {{ summary.label }}</strong>
+    <small class="muted">(검증 완료 {{ summary.verified | length }}건, 수익·손실 모두 포함)</small></p>
+  {% if summary.excluded %}
+  <details><summary>제외된 실험 {{ summary.excluded | length }}건</summary>
+    <ul>{% for e in summary.excluded %}<li>#{{ e.id }} {{ e.name }} — {{ e.reason }}</li>{% endfor %}</ul></details>
+  {% endif %}
+</section>
+
+<h2>실험 목록</h2>
+{% if exps %}
+<div class="table-wrap"><table>
+  <tr><th>#</th><th>이름</th><th>상태</th><th class="num">가상 자본</th><th>기간</th><th>시작–종료</th></tr>
+  {% for e in exps %}<tr><td>{{ e.id }}</td><td><a href="/paper/{{ e.id }}">{{ e.name }}</a>{% if e.is_imported_readonly %} <span class="chip">읽기 전용</span>{% endif %}</td>
+    <td>{{ status_chip(e.status) }}</td><td class="num">{{ e.initial_capital | krw }}</td><td>{{ e.duration_trading_days }}거래일</td>
+    <td>{{ e.start_date or "첫 판단 전" }} – {{ e.end_date or "" }}</td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="empty">등록된 실험이 없습니다.</div>{% endif %}
+
+<section class="card">
+  <h2>새 실험 등록</h2>
+  <p class="muted">아래 값은 새 서비스의 제안 기본값입니다(과거 설정 복원 아님). 첫 실제 판단 후에는 바꿀 수 없고, 그 판단 거래일이 시작일이 됩니다.</p>
+  <form class="stack" method="post" action="/admin/experiments">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>이름 <input name="name" required maxlength="100"></label>
+    <div class="grid">
+      <label>가상 자본(원) <input name="initial_capital" inputmode="numeric" value="1000000" required></label>
+      <label>운용 기간(거래일) <input name="duration_trading_days" inputmode="numeric" value="5" required></label>
+      <label>최대 보유 종목 <input name="max_positions" inputmode="numeric" value="3" required></label>
+      <label>종목당 최대 비중(bp, 3500 = 35%) <input name="max_position_bp" inputmode="numeric" value="3500" required></label>
+      <label>거래별 비용(bp, 15 = 0.15%) <input name="cost_bps" inputmode="numeric" value="15" required></label>
+    </div>
+    <button type="submit">등록</button>
+  </form>
+</section>
+{% endblock %}

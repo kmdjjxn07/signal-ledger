@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}쉬운 용어 사전 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>쉬운 용어 사전</h1>
+<div class="card"><dl class="kv">
+{% for t, d in terms %}<dt><strong>{{ t }}</strong></dt><dd>{{ d }}</dd>{% endfor %}
+</dl></div>
+{% endblock %}

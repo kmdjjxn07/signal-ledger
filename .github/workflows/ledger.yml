@@ -1,0 +1,85 @@
+# 시그널 원장 자동 실행 (공개 저장소 = GitHub Actions 무료)
+#
+# 하는 일: 상태 파일(state/) 복원 → 제출 파일(inbox/) 반영 → 예약 작업 → 상태 저장·커밋 → 공개 사이트 배포
+# 비밀값은 저장소 Settings → Secrets and variables → Actions 에만 넣습니다. 파일에 적지 마세요.
+#
+# 시각(cron)은 UTC 기준입니다. 한국시간 = UTC + 9시간.
+#   "*/10 23 * * 0-4"  → 한국시간 월~금 08:00~08:59, 10분마다
+#   "*/10 0-9 * * 1-5" → 한국시간 월~금 09:00~18:59, 10분마다
+# GitHub 사정으로 예약 실행이 수 분~수십 분 늦거나 가끔 건너뛸 수 있습니다(정확한 시각을 보장하지 않음).
+# 공휴일·휴장일 판단은 이 시각표가 아니라 앱의 거래소 캘린더가 합니다.
+
+name: ledger
+
+on:
+  schedule:
+    - cron: "*/10 23 * * 0-4"
+    - cron: "*/10 0-9 * * 1-5"
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["inbox/*.json"]
+
+concurrency:
+  group: ledger
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: 패키지 설치
+        run: pip install -r requirements.txt
+
+      - name: 원장 실행
+        env:
+          SL_ENV: production
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || secrets.GEMINI_MODEL }}
+          NAVER_QUOTE_ENABLED: ${{ vars.NAVER_QUOTE_ENABLED || 'false' }}
+        run: python -m app.ci run
+
+      - name: 상태 저장(커밋)
+        run: |
+          git config user.name "signal-ledger-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state inbox
+          if git diff --cached --quiet; then
+            echo "바뀐 기록 없음"
+          else
+            git commit -q -m "ledger: 자동 실행 $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M KST')"
+            for i in 1 2 3; do
+              if git pull -q --rebase origin main && git push -q origin HEAD:main; then exit 0; fi
+              sleep 5
+            done
+            echo "커밋을 올리지 못했습니다(다음 실행에서 다시 시도)."
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

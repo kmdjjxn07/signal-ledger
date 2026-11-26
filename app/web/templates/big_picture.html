@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "macros.html" import source_line %}
+{% block title %}Big Picture · 시그널 원장{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Big Picture</h1><a class="btn" href="/admin/macro/new">새 판 작성</a></div>
+<p class="disclaimer">분기별 거시 전망입니다. 진행 중인 분기는 확정 실적이 아니며, 연간 전망을 분기 실적으로 표시하지 않습니다. 수정은 새 판으로 쌓입니다.</p>
+{% if items %}
+  {% for it in items %}{% set o = it.outlook %}{% set r = it.latest %}
+  <section class="card">
+    <h2>{{ o.quarter_id }} <small class="muted">{{ o.period_start }} – {{ o.period_end }}</small>
+      {% if in_progress(o, today) %}<span class="chip warn">진행 중 — 확정 아님</span>{% else %}<span class="chip">기간 종료</span>{% endif %}</h2>
+    {% if r %}
+    <p class="muted">판 {{ r.revision_no }} · 작성 {{ r.created_at | kst }} · 자료 기준일 {{ r.data_as_of }} · 갱신 이유: {{ r.reason }}</p>
+    <div class="section-label">사실</div><p>{{ r.content.facts }}</p>
+    <div class="section-label">해석</div><p class="interp">{{ r.content.interpretation }}</p>
+    {% for k, label in (("korea", "한국 변수"), ("us", "미국 변수"), ("global", "글로벌 변수"), ("transmission", "주식시장 전달 경로")) %}
+      {% if r.content[k] %}<div class="section-label">{{ label }}</div><p>{{ r.content[k] }}</p>{% endif %}{% endfor %}
+    <div class="section-label">반대 위험</div><p>{{ r.content.risks }}</p>
+    <div class="section-label">다음 확인 조건</div><p>{{ r.content.next_checks }}</p>
+    <details><summary>출처 {{ r.source_ids | length }}건</summary><ul>{% for sid in r.source_ids %}<li>{{ source_line(sources.get(sid)) }}</li>{% endfor %}</ul></details>
+    {% if it.revisions | length > 1 %}<details><summary>이전 판 {{ it.revisions | length - 1 }}개</summary>
+      {% for old in it.revisions[1:] %}<p><strong>판 {{ old.revision_no }}</strong> ({{ old.created_at | kst }}, 이유: {{ old.reason }})<br>{{ old.content.facts }}<br><em>{{ old.content.interpretation }}</em></p>{% endfor %}
+    </details>{% endif %}
+    {% endif %}
+  </section>
+  {% endfor %}
+{% else %}<div class="empty">작성된 분기 전망이 없습니다.</div>{% endif %}
+{% endblock %}

@@ -1,0 +1,19 @@
+# 파이썬·도구
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ===== 내 컴퓨터 전용: 절대 GitHub에 올리지 않음 =====
+# 내 DB(로그인 계정·보유종목 포함), 백업, 원본 응답
+data/
+*.db
+*.db-wal
+*.db-shm
+# API 키
+.env
+# 보유종목 가져오기 파일
+holdings*.json
+
+# GitHub Actions가 매번 새로 만드는 공개 사이트(커밋하지 않고 Pages로 바로 배포)
+_site/

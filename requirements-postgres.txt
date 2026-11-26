@@ -1,0 +1,2 @@
+# 운영에서 PostgreSQL을 쓸 때만 추가 설치: pip install -r requirements-postgres.txt
+psycopg[binary]==3.3.9

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}분기 전망 작성 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>Big Picture 새 판</h1>
+<p class="disclaimer">새 공식 발표나 구조적 변화가 있을 때만 갱신합니다. 이전 판은 보존됩니다. 진행 중인 분기를 확정 실적처럼 쓰지 마세요.</p>
+<form class="stack card" method="post" action="/admin/macro">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <div class="grid">
+    <label>분기 ID <input name="quarter_id" required placeholder="2026Q4"></label>
+    <label>자료 확인 기준일 <input type="date" name="data_as_of" required value="{{ today }}"></label>
+    <label>출처 번호(쉼표) <input name="source_ids" required></label>
+  </div>
+  <label>갱신 이유 <input name="reason" required></label>
+  <label>사실 <textarea name="facts" required></textarea></label>
+  <label>해석 <textarea name="interpretation" required></textarea></label>
+  <div class="grid"><label>한국 변수 <textarea name="korea"></textarea></label><label>미국 변수 <textarea name="us"></textarea></label>
+    <label>글로벌 변수 <textarea name="global"></textarea></label></div>
+  <label>주식시장 전달 경로 <textarea name="transmission"></textarea></label>
+  <label>반대 위험 <textarea name="risks" required></textarea></label>
+  <label>다음 확인 조건 <textarea name="next_checks" required></textarea></label>
+  <button type="submit">새 판 추가</button>
+</form>
+{% endblock %}

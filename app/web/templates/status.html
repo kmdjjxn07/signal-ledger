@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_chip %}
+{% block title %}운영 상태 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>운영 상태</h1>
+<p class="disclaimer">각 상태는 서로 다른 사실입니다. '설정됨'은 '성공'이 아니고, '예약됨'은 '실행 성공'이 아닙니다.
+  이 사이트는 GitHub Actions가 정해진 시각에 자동으로 다시 만듭니다. GitHub 사정으로 실행이 늦거나 건너뛸 수 있습니다.</p>
+
+<section class="card">
+  <h2>요약</h2>
+  <div class="table-wrap"><table>
+    <tr><th>마지막 작업 완료</th><td colspan="2">{{ last_finished | kst if last_finished else "아직 없음" }}</td></tr>
+    <tr><th>오늘({{ today }}) 거래소 캘린더</th><td colspan="2">{% if today_info.status == "trading" %}<span class="chip ok">거래일</span>{% elif today_info.status == "closed" %}<span class="chip">휴장</span>{% else %}<span class="chip bad">미확인</span>{% endif %} {{ today_info.reason }}</td></tr>
+    {% for key, label in (("ai", "AI 공급자 연결"), ("collection", "자료 수집 성공"), ("judgement", "판단 기록"), ("verified_fill", "검증된 모의체결")) %}
+    <tr><th>{{ label }}</th><td>{% if ov[key].ok %}<span class="chip ok">예</span>{% else %}<span class="chip warn">아니오</span>{% endif %}</td><td>{{ ov[key].detail }}</td></tr>
+    {% endfor %}
+    <tr><th>liveExecutionVerified</th><td><code>{{ "true" if ov.liveExecutionVerified else "false" }}</code></td><td>적격 원본 관측·위험 검증·체결 저장·이후 감사 통과 시에만 true</td></tr>
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>데이터 공급자별 최근 결과</h2>
+  {% if providers %}<div class="table-wrap"><table><tr><th>공급자·작업</th><th>최근</th><th>마지막 성공</th></tr>
+  {% for p in providers %}<tr><td>{{ p.provider }} · <small>{{ p.operation }}</small></td><td>{{ status_chip(p.last.status) }}<br><small>{{ p.last.requested_at | kst }}</small></td>
+    <td>{{ p.last_ok.requested_at | kst if p.last_ok else "없음" }}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">호출 기록이 없습니다.</div>{% endif %}
+  <p class="muted"><small>원본 응답은 공급자 이용조건을 확인하지 못해 공개하지 않습니다. 기록에는 원본의 해시값과 출처 링크만 남깁니다.</small></p>
+</section>
+
+<section class="card">
+  <h2>최근 예약 작업</h2>
+  {% if runs %}<div class="table-wrap"><table><tr><th>작업</th><th>슬롯</th><th>상태</th><th>완료</th><th>메모</th></tr>
+  {% for r in runs %}<tr><td>{{ job_labels.get(r.job_name, r.job_name) }}</td><td class="mono"><small>{{ r.slot_key }}</small></td><td>{{ status_chip(r.status) }}</td>
+    <td><small>{{ r.finished_at | kst }}</small></td><td><small>{{ (r.error or "").splitlines()[0] if r.error else (r.summary.reason if r.summary and r.summary.reason else "") }}</small></td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">실행 기록이 없습니다.</div>{% endif %}
+</section>
+
+<section class="card">
+  <h2>모의운용 원장 무결성</h2>
+  {% if integrity %}<ul>{% for eid, (ok_, msg_) in integrity.items() %}<li>실험 #{{ eid }}: {% if ok_ %}<span class="chip ok">해시 체인 정상</span>{% else %}<span class="chip bad">불일치</span>{% endif %} <small>{{ msg_ }}</small></li>{% endfor %}</ul>
+  {% else %}<div class="empty">등록된 실험이 없습니다.</div>{% endif %}
+</section>
+
+<section class="card">
+  <h2>내려받기</h2>
+  <p><a href="/export.json">export.json</a> — 브리핑·연구·가설·판정·모의운용 원장 전체(호환 JSON). 개인 보유종목은 포함하지 않습니다.</p>
+</section>
+{% endblock %}

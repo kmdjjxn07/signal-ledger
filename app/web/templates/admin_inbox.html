@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}제출 파일 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>제출 파일 (inbox)</h1>
+<p class="disclaimer">편집기 모드에서 만든 입력은 <code>inbox/</code> 폴더에 파일로 쌓입니다. GitHub Desktop에서 커밋·푸시하면
+GitHub 실행기가 같은 검증 규칙으로 하나씩 반영하고, 결과를 <code>inbox/processed/</code>에 남깁니다. 한 파일 안의 명령은 전부 반영되거나 전부 거부됩니다.</p>
+
+<section class="card">
+  <h2>올리기 전(대기 중) {{ pending | length }}건</h2>
+  {% if pending %}<div class="table-wrap"><table><tr><th>파일</th><th>명령</th></tr>
+  {% for f in pending %}<tr><td class="mono"><small>{{ f.name }}</small></td><td>{{ f.kinds | join(", ") }}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">대기 중인 제출 파일이 없습니다.</div>{% endif %}
+</section>
+
+<section class="card">
+  <h2>처리 결과 (최근 {{ processed | length }}건)</h2>
+  <p class="muted"><small>GitHub에서 처리된 결과는 GitHub Desktop에서 <b>Pull(가져오기)</b> 한 뒤에 여기 보입니다.</small></p>
+  {% if processed %}<div class="table-wrap"><table><tr><th>파일</th><th>처리 시각</th><th>결과</th><th>내용</th></tr>
+  {% for r in processed %}<tr><td class="mono"><small>{{ r.file }}</small></td><td><small>{{ r.processed_at }}</small></td>
+    <td>{% if r.ok %}<span class="chip ok">반영</span>{% else %}<span class="chip bad">거부</span>{% endif %}</td>
+    <td><small>{% for m in r.messages %}{{ m }}<br>{% endfor %}{{ r.error or "" }}</small></td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">아직 처리 결과가 없습니다.</div>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,12 @@
+# Windows + Python 3.14(cp314, win_amd64)에서 미리 컴파일된 휠이 있는 버전으로 고정함 (2026-11-24 확인)
+# 컴파일 도구(Visual C++, Rust)가 필요한 패키지(lxml, weasyprint 등)는 사용하지 않음
+fastapi==0.165.0
+uvicorn==0.54.0
+sqlalchemy==2.1.9
+pydantic==2.14.4
+jinja2==3.1.6
+python-multipart==0.0.34
+httpx==0.28.1
+alembic==1.20.1
+tzdata==2026.6
+pytest==9.2.0

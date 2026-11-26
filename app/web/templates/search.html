@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}종목 검색 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>종목 검색</h1>
+{% if static_site %}
+<p class="muted">공개 사이트에는 기록(심층검증·가설·모의운용)이 있는 종목만 실려 있습니다. 전체 종목 검색과 실시간 참고 시세는 소유자 화면에서만 됩니다.</p>
+{% else %}
+<form class="inline" method="get" action="/search" role="search">
+  <label>종목명 또는 6자리 코드 <input name="q" value="{{ q }}" maxlength="40" autofocus></label>
+  <button type="submit">검색</button>
+</form>
+{% endif %}
+{% if total == 0 and not static_site %}
+<div class="notice warn">종목 마스터가 비어 있습니다. KRX 공식 일별 데이터를 동기화하면 채워집니다(관리·운영 → 공식 가격 동기화).</div>
+{% endif %}
+{% if q or static_site %}
+  {% if results %}
+  <div class="table-wrap"><table><tr><th>코드</th><th>이름</th><th>시장</th><th>구분</th></tr>
+  {% for i in results %}<tr><td class="mono"><a href="/stock/{{ i.code }}">{{ i.code }}</a></td><td><a href="/stock/{{ i.code }}">{{ i.name }}</a></td>
+    <td>{{ i.market or "" }}</td><td>{{ "ETF" if i.is_etf else "기업" }}{% if i.managed_issue %} · 위험 표시{% endif %}</td></tr>{% endfor %}
+  </table></div>
+  {% elif static_site %}<div class="empty">아직 기록이 있는 종목이 없습니다.</div>
+  {% else %}<div class="empty">'{{ q }}'에 맞는 종목이 없습니다.</div>{% endif %}
+{% endif %}
+{% endblock %}

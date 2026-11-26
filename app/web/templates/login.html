@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}로그인 · 시그널 원장{% endblock %}
+{% block content %}
+<div class="login-wrap card">
+  <h1>시그널 <span class="accent-text">원장</span></h1>
+  <p class="muted">소유자 전용 개인 연구 도구입니다.</p>
+  {% if error %}<div class="notice bad" role="alert">{{ error }}</div>{% endif %}
+  <form class="stack" method="post" action="/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>아이디 <input name="username" autocomplete="username" required></label>
+    <label>비밀번호 <input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit">로그인</button>
+  </form>
+  <p class="muted"><small>계정이 없다면 서버에서 <code>python -m app.cli create-owner</code>를 실행하세요.</small></p>
+</div>
+{% endblock %}

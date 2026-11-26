@@ -1,0 +1,73 @@
+{% macro status_chip(status) -%}
+  {%- set cls = {"ok": "ok", "published": "ok", "통과": "ok", "검증완료": "ok", "succeeded": "ok", "hit": "ok",
+                 "partial": "warn", "scheduled": "warn", "draft": "warn", "pending": "warn", "정산대기": "warn",
+                 "운용중": "warn", "첫판단대기": "warn", "관찰 보류": "warn", "skipped": "warn", "중기추적": "warn",
+                 "활성": "warn", "running": "warn", "not_configured": "warn",
+                 "withheld": "bad", "missing": "bad", "failed": "bad", "폐기": "bad", "miss": "bad",
+                 "auth_failed": "bad", "forbidden": "bad", "invalid_response": "bad", "network_error": "bad",
+                 "무효화": "bad"}.get(status, "") -%}
+  <span class="chip {{ cls }}">{{ status | status_ko }}</span>
+{%- endmacro %}
+
+{% macro direction(change) -%}
+  {%- if change is none -%}<span class="muted">확인 안 됨</span>
+  {%- else -%}{%- set v = change | float -%}
+  <span class="{{ 'up' if v > 0 else ('down' if v < 0 else 'flat') }}">{{ change | pct }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro outcome(ev) -%}
+  {%- if ev is none -%}<span class="chip">미평가</span>
+  {%- elif ev.outcome == "hit" -%}<span class="chip ok">적중</span>
+  {%- elif ev.outcome == "miss" -%}<span class="chip bad">실패</span>
+  {%- elif ev.outcome == "flat" -%}<span class="chip">보합</span>
+  {%- else -%}<span class="chip warn">보류</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro source_line(src) -%}
+  {%- if src -%}<span class="grade">{{ src.grade }}</span> <a href="{{ src.url }}" rel="noopener noreferrer" target="_blank">{{ src.title }}</a>
+  <small>· {{ src.provider }} · 확인 {{ src.checked_at | kst }}{% if src.is_company_claim %} · 기업 공식자료(경영진 주장일 수 있음){% endif %}</small>
+  {%- else -%}<span class="chip bad">출처 없음</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro briefing_body(b, sources) %}
+  {% set c = b.content %}
+  {% if c.summary %}<p class="summary">{{ c.summary }}</p>{% endif %}
+  {% if c.regime %}<p><strong>시장 국면:</strong> {{ c.regime }}</p>{% endif %}
+
+  <div class="section-label">확인된 사실</div>
+  {% if c.facts %}
+  <ul class="facts">
+    {% for f in c.facts %}
+    <li>{{ f.text }}{% if f.value %}: <span class="fact-value">{{ f.value }}</span>{% endif %}
+      {% if f.detail %}<small> ({{ f.detail }})</small>{% endif %}
+      <details><summary>출처</summary>{{ source_line(sources.get(f.source_id)) }}</details></li>
+    {% endfor %}
+  </ul>
+  {% else %}<div class="empty">확인된 사실이 없습니다.</div>{% endif %}
+
+  <div class="section-label">해석 <small>(사실이 아니라 설명입니다)</small></div>
+  {% if c.interpretations %}
+  <ul class="interp">{% for i in c.interpretations %}<li>{{ i.text }} {% if i.by == "ai" %}<span class="tag-ai">AI 제안</span>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<div class="empty">아직 해석이 작성되지 않았습니다.</div>{% endif %}
+
+  {% if c.counter_scenarios %}
+  <div class="section-label">반대 시나리오</div>
+  <ul class="scen">{% for s in c.counter_scenarios %}<li>{{ s }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <div class="section-label">다음에 확인할 것</div>
+  {% if c.next_checks %}<ul class="checks">{% for s in c.next_checks %}<li>{{ s }}</li>{% endfor %}</ul>
+  {% else %}<div class="empty">기록된 확인 조건이 없습니다.</div>{% endif %}
+
+  {% if c.data_status %}
+  <details {% if c.data_status | selectattr("status", "ne", "ok") | list %}open{% endif %}>
+    <summary>데이터 상태 ({{ c.data_status | selectattr("status", "ne", "ok") | list | length }}건 지연·누락)</summary>
+    <div class="table-wrap"><table>
+      <tr><th>항목</th><th>상태</th><th>설명</th></tr>
+      {% for s in c.data_status %}<tr><td>{{ s.item }}{% if s.required %} <small>(필수)</small>{% endif %}</td>
+        <td>{{ status_chip(s.status) }}</td><td>{{ s.detail }}</td></tr>{% endfor %}
+    </table></div>
+  </details>
+  {% endif %}
+{% endmacro %}

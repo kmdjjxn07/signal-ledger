@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "macros.html" import briefing_body, status_chip %}
+{% block title %}{{ kind_label[b.kind] }} {{ b.trading_date.isoformat() }} · 시그널 원장{% endblock %}
+{% block content %}
+<h1>{{ kind_label[b.kind] }} · {{ b.trading_date.isoformat() }}</h1>
+<p class="muted">v{{ b.version }} {{ status_chip(b.status) }} · 작성 {{ b.created_by }} · 생성 {{ b.created_at | kst }}
+  {% if b.published_at %}· 발행 {{ b.published_at | kst }}{% endif %}</p>
+{% if b.status in ("draft", "withheld") %}
+<div class="notice warn">이 판은 정식 발행본이 아닙니다.
+  <form class="inline" method="post" action="/admin/briefing/{{ b.id }}/publish">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button type="submit">검증 후 발행</button>
+  </form>
+  <small>발행 시 서버가 출처·필수 수치를 다시 검사합니다.</small></div>
+{% endif %}
+<section class="card">{{ briefing_body(b, sources) }}</section>
+<h2>같은 날 판 기록</h2>
+<div class="table-wrap"><table>
+  <tr><th>판</th><th>상태</th><th>작성</th><th>생성</th></tr>
+  {% for v in versions %}<tr><td><a href="/briefing/{{ v.id }}">v{{ v.version }}</a></td><td>{{ status_chip(v.status) }}</td>
+    <td>{{ v.created_by }}</td><td>{{ v.created_at | kst }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

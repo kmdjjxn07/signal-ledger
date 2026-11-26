@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ inst.name }} · 종목 · 시그널 원장{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ inst.name }} <small class="mono muted">{{ inst.code }}</small></h1>
+  <div class="muted">{{ inst.market or "" }} · {{ "ETF" if inst.is_etf else "기업" }}{% if inst.corp_code %} · DART {{ inst.corp_code }}{% endif %}</div></div>
+  {% if not inst.is_etf %}<a class="btn secondary" href="/research/{{ inst.code }}">Research 보기</a>{% endif %}</div>
+
+{% if not static_site %}<section class="card quote-box" data-quote-code="{{ inst.code }}" data-state="idle">
+  <h2>참고 시세 <span class="grade">B</span> <small class="muted">공식 평가 아님</small></h2>
+  <button type="button" class="secondary">지금 조회</button>
+  <pre class="quote-body mono" aria-live="polite"></pre>
+</section>{% endif %}
+
+<section class="card chart">
+  <h2>KRX 공식 일별 종가·거래량 <span class="grade">A</span></h2>
+  {% if chart %}
+  <svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" role="img" aria-label="공식 종가 추이 {{ chart.first }}부터 {{ chart.last }}까지">
+    <polyline class="line" points="{{ chart.points }}"/></svg>
+  <svg viewBox="0 0 {{ chart.w }} 60" role="img" aria-label="거래량">
+    {% for b in chart.bars %}<rect class="bar{% if b.missing %} missing{% endif %}" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.w }}" height="{{ b.h if not b.missing else 59 }}"/>{% endfor %}
+  </svg>
+  <p class="muted"><small>{{ chart.first }} – {{ chart.last }} · 최저 {{ chart.lo | krw if inst.market != "INDEX" else chart.lo }} · 최고 {{ chart.hi | krw if inst.market != "INDEX" else chart.hi }}
+    · 선은 수집된 거래일끼리만 잇습니다.</small></p>
+  {% if gaps %}<div class="notice warn">수집되지 않은 거래일 {{ gaps | length }}일: {{ gaps[:10] | join(", ") }}{% if gaps | length > 10 %} …{% endif %} — 가짜 값으로 채우지 않았습니다.</div>{% endif %}
+  {% else %}<div class="empty">공식 일별 데이터가 2일 미만입니다.</div>{% endif %}
+  {% if series %}<details><summary>일별 원자료 {{ series | length }}일</summary>
+    <div class="table-wrap"><table><tr><th>거래일</th><th class="num">종가</th><th class="num">거래량</th><th class="num">거래대금</th><th>수집</th></tr>
+    {% for p in series | reverse %}<tr><td>{{ p.trading_date }}</td><td class="num">{{ p | price }}</td><td class="num">{{ "{:,}".format(p.volume) if p.volume is not none else "—" }}</td>
+      <td class="num">{{ p.trading_value | krw if p.trading_value is not none else "—" }}</td><td>{{ p.fetched_at | kst }}{% if p.supersedes_id %} <span class="chip">정정값</span>{% endif %}</td></tr>{% endfor %}
+    </table></div></details>{% endif %}
+</section>
+
+<section class="card">
+  <h2>최근 30일 공시 <span class="grade">A</span></h2>
+  {% if disc_status %}<div class="notice info">{{ disc_status }}</div>{% endif %}
+  {% if disclosures %}<ul>{% for d in disclosures %}<li><a href="{{ d.url }}" target="_blank" rel="noopener noreferrer">{{ d.report_nm }}</a> <small class="muted">{{ d.rcept_dt }} · {{ d.flr_nm }}</small></li>{% endfor %}</ul>
+  {% elif not disc_status %}<div class="empty">최근 30일 공시가 없습니다.</div>{% endif %}
+</section>
+{% endblock %}

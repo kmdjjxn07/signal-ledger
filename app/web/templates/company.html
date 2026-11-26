@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_chip, outcome, direction, source_line %}
+{% block title %}{{ inst.name }} · Research · 시그널 원장{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ inst.name }} <small class="mono muted">{{ inst.code }}</small></h1>
+    <div class="muted">{{ inst.market or "" }}{% if inst.sector %} · {{ inst.sector }}{% else %} · 업종 미입력{% endif %}
+      {% if inst.managed_issue %} <span class="chip bad">관리종목·거래정지 위험 표시</span>{% endif %}
+      {% if inst.is_etf %} <span class="chip">ETF — 기업 9항목 미적용</span>{% endif %}</div></div>
+  <div><a class="btn secondary" href="/stock/{{ inst.code }}">종목 정보</a>
+    {% if not inst.is_etf %}<a class="btn secondary" href="/admin/research/new?code={{ inst.code }}">새 검증 판</a>
+    <a class="btn" href="/admin/hypothesis/new?code={{ inst.code }}">가설 발행</a>{% endif %}</div>
+</div>
+
+{% set cur = hist[0] if hist else none %}
+<section class="card">
+  <h2>현재 심층검증 {% if cur %}{{ status_chip(cur.status) }}{% endif %}</h2>
+  {% if cur %}
+    <p class="muted">판 #{{ cur.id }} · 검증 {{ cur.checked_at | kst }} · 확인 항목 {{ cur.fully_verified_items }}/9 · 핵심 3항목 {{ "통과" if cur.core_passed else "미통과" }}
+      · 유동성 {{ "확인" if cur.liquidity_ok else "미확인" }}</p>
+    {% if cur.failed_reasons %}<div class="notice warn">미달: {{ cur.failed_reasons | join(" / ") }}</div>{% endif %}
+    {% for key, label in items %}{% set it = cur.items[key] %}
+      <details {% if not it.fully_verified %}open{% endif %}>
+        <summary>{{ label }} {% if it.fully_verified %}<span class="chip ok">확인</span>{% else %}<span class="chip warn">{{ it.reason }}</span>{% endif %}
+          <small class="muted">독립 A~C 근거 {{ it.independent_sources }}개</small></summary>
+        <p>{{ it.conclusion or "(조사 내용 없음)" }}</p>
+        <ul>{% for sid in it.source_ids %}<li>{{ source_line(sources.get(sid)) }}</li>{% endfor %}</ul>
+      </details>
+    {% endfor %}
+    {% if cur.red_flags %}<h3>구조적 적신호</h3><ul>{% for f in cur.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
+    {% if cur.next_checks %}<h3>다음에 확인할 자료</h3><ul>{% for n in cur.next_checks %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+  {% else %}<div class="empty">이 종목의 심층검증이 아직 없습니다.</div>{% endif %}
+</section>
+
+<h2>투자 가설</h2>
+{% if hyps %}
+  {% for h in hyps %}
+  <section class="card">
+    <h3><span class="mono">{{ h.uid }}</span> · {{ "상승" if h.direction == "up" else "하락" }} 가설 {{ status_chip(h.status) }}</h3>
+    <dl class="kv">
+      <dt>연구 참조</dt><dd>판 #{{ h.research_version_id }} ({{ h.research_code }}, {{ h.research_checked_at | kst }})</dd>
+      <dt>기준가격</dt><dd>{{ h.base_price | krw }} — KRX 공식 종가 {{ h.base_date.isoformat() }} (가격 ID {{ h.base_price_id }})</dd>
+      <dt>판정일 (고정)</dt><dd>단기 {{ h.short_date.isoformat() }} · 중기 {{ h.medium_date.isoformat() }}</dd>
+      <dt>등급·점수</dt><dd>{{ h.quality_tier }} · {{ h.quality_score }}/10 ({% for k, v in h.score_breakdown.items() %}{{ k }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}) · 확신도 {{ h.confidence }}</dd>
+      <dt>핵심 촉매</dt><dd>{{ h.catalyst }}</dd>
+      <dt>아직 반영 안 된 이유</dt><dd>{{ h.not_priced_reason }}</dd>
+      <dt>반대 시나리오</dt><dd>{{ h.counter_scenario }}</dd>
+      <dt>무효화 조건</dt><dd>{{ h.invalidation }}</dd>
+      <dt>다음 확인</dt><dd>{{ h.next_check }}</dd>
+      <dt>단기 결과</dt><dd>{{ outcome(ev[h.id].short) }} {% if ev[h.id].short and ev[h.id].short.change_pct %}{{ direction(ev[h.id].short.change_pct) }}{% endif %}</dd>
+      <dt>중기 결과</dt><dd>{{ outcome(ev[h.id].medium) }} {% if ev[h.id].medium and ev[h.id].medium.change_pct %}{{ direction(ev[h.id].medium.change_pct) }}{% endif %}</dd>
+    </dl>
+    <details><summary>근거 출처 {{ h.source_ids | length }}건</summary><ul>{% for sid in h.source_ids %}<li>{{ source_line(sources.get(sid)) }}</li>{% endfor %}</ul></details>
+    {% if h.status in ("활성", "중기추적") %}
+    <details><summary>다음 확인 일정 변경 · 무효화 기록</summary>
+      <form class="stack" method="post" action="/admin/hypothesis/{{ h.id }}/next-check">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <label>다음 확인 일정 <input name="next_check" required></label><button type="submit" class="secondary">변경(감사로그)</button></form>
+      <form class="stack" method="post" action="/admin/hypothesis/{{ h.id }}/invalidate">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <label>무효화 사유(사실 근거) <input name="reason" required></label><button type="submit" class="danger">무효화 기록</button></form>
+    </details>
+    {% endif %}
+  </section>
+  {% endfor %}
+{% else %}<div class="empty">이 종목의 가설이 없습니다.</div>{% endif %}
+
+<h2>검증 이력</h2>
+{% if hist | length > 1 %}
+<div class="table-wrap"><table><tr><th>판</th><th>상태</th><th>확인 항목</th><th>검증</th></tr>
+{% for r in hist[1:] %}<tr><td>#{{ r.id }}</td><td>{{ status_chip(r.status) }}</td><td>{{ r.fully_verified_items }}/9</td><td>{{ r.checked_at | kst }}</td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="empty">이전 판이 없습니다.</div>{% endif %}
+{% endblock %}

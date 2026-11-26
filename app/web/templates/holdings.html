@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "macros.html" import direction %}
+{% block title %}내 보유종목 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>내 보유종목</h1>
+<p class="disclaimer">공식 평가는 KRX 정규장 공식 종가만 씁니다(세금·수수료 미반영). 모의투자 자산과 완전히 분리되어 있고, 외부 AI로 보내지 않습니다.
+  브리핑·엔진 작업은 수량·평단을 바꾸지 않습니다.</p>
+{% if rows %}
+  {% for r in rows %}
+  <section class="card">
+    <h2>{{ r.h.name }} <small class="mono muted">{{ r.h.code }}</small></h2>
+    <div class="grid">
+      <div><div class="section-label">내 기록 (사용자 입력)</div>
+        <dl class="kv"><dt>보유 수량</dt><dd>{{ r.pos.quantity }}주</dd><dt>총매입금액</dt><dd>{{ r.pos.total_cost | krw }}</dd>
+          <dt>평균단가</dt><dd>{{ r.pos.avg_price | krw if r.pos.avg_price else "—" }}</dd></dl></div>
+      <div><div class="section-label">공식 평가 (KRX 종가)</div>
+        {% if r.val.price %}
+        <dl class="kv"><dt>평가 기준</dt><dd>{{ r.val.price.trading_date }} 종가 {{ r.val.price.close | krw }}<br><small>수집 {{ r.val.price.fetched_at | kst }}</small></dd>
+          <dt>평가금액</dt><dd>{{ r.val.value | krw }}</dd>
+          <dt>평가손익</dt><dd>{{ r.val.pnl | krw }} ({{ direction(r.val.pnl_pct) }})</dd></dl>
+        {% else %}<div class="empty">공식 종가가 아직 수집되지 않았습니다.</div>{% endif %}</div>
+      <div><div class="section-label">직전 거래일 대비 (매수가 대비 아님)</div>
+        {% if r.val.prev_price %}<dl class="kv"><dt>비교 기준</dt><dd>{{ r.val.prev_price.trading_date }} 종가 {{ r.val.prev_price.close | krw }}</dd>
+          <dt>하루 변동</dt><dd>{{ r.val.day_change | krw }} ({{ direction(r.val.day_change_pct) }})</dd></dl>
+        {% else %}<div class="empty">직전 거래일 공식 종가가 없습니다.</div>{% endif %}</div>
+    </div>
+    <details><summary>거래 기록 {{ r.txs | length }}건 · 추가·정정</summary>
+      <div class="table-wrap"><table><tr><th>#</th><th>날짜</th><th>구분</th><th class="num">수량</th><th class="num">단가</th><th>메모</th><th>상태</th></tr>
+      {% for t in r.txs %}<tr><td>{{ t.id }}</td><td>{{ t.trade_date }}</td><td>{{ "매수" if t.side == "buy" else "매도" }}</td>
+        <td class="num">{{ t.quantity }}</td><td class="num">{{ t.unit_price | krw }}</td><td>{{ t.note or "" }}</td>
+        <td>{% if t.voids_id %}#{{ t.voids_id }} 정정{% endif %}{% if t.id not in r.effective_ids %} <span class="chip">무효</span>{% endif %}</td></tr>{% endfor %}
+      </table></div>
+      <form class="inline" method="post" action="/admin/holdings/{{ r.h.id }}/tx">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <label>날짜 <input type="date" name="trade_date" required></label>
+        <label>구분 <select name="side"><option value="buy">매수</option><option value="sell">매도</option></select></label>
+        <label>수량 <input name="quantity" inputmode="numeric" required size="6"></label>
+        <label>단가(원) <input name="unit_price" inputmode="numeric" required size="9"></label>
+        <label>정정 대상 # <input name="voids_id" inputmode="numeric" size="4" placeholder="새 거래면 비움"></label>
+        <label>메모 <input name="note"></label>
+        <button type="submit">기록 추가</button>
+      </form>
+      <small class="muted">정정: 대상 # 을 넣고 올바른 값을 입력하면 이전 기록은 보존된 채 무효 처리됩니다. 삭제는 수량 0으로 정정하세요.</small>
+    </details>
+  </section>
+  {% endfor %}
+{% else %}<div class="empty">등록된 보유종목이 없습니다.</div>{% endif %}
+
+<section class="card"><h2>보유종목 추가</h2>
+  <form class="inline" method="post" action="/admin/holdings">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>종목코드 <input name="code" required size="7" maxlength="6"></label>
+    <label>이름(선택) <input name="name"></label>
+    <label>매수일 <input type="date" name="trade_date" required></label>
+    <label>수량 <input name="quantity" inputmode="numeric" required size="6"></label>
+    <label>매수단가(원) <input name="unit_price" inputmode="numeric" required size="9"></label>
+    <button type="submit">추가</button>
+  </form></section>
+{% endblock %}

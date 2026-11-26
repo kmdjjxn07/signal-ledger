@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_chip %}
+{% block title %}관리·운영 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>관리·운영 상태</h1>
+<p><a href="/admin/inbox">제출 파일(inbox) 보기</a>{% if editor_mode() %} · <span class="chip warn">편집기 모드</span> 작업 실행·가격 동기화는 GitHub 실행기가 합니다.{% endif %}</p>
+<p class="disclaimer">각 상태는 서로 다른 사실입니다. '설정됨'은 '성공'이 아니고, '예약 등록'은 '실행 성공'이 아닙니다.</p>
+
+<section class="card">
+  <h2>상태 요약</h2>
+  <div class="table-wrap"><table>
+    {% for key, label in (("deploy", "배포(웹 앱 동작)"), ("ai", "AI 공급자 연결"), ("collection", "자료 수집 성공"), ("judgement", "판단 기록"), ("verified_fill", "검증된 모의체결")) %}
+    <tr><th>{{ label }}</th><td>{% if ov[key].ok %}<span class="chip ok">예</span>{% else %}<span class="chip warn">아니오</span>{% endif %}</td><td>{{ ov[key].detail }}</td></tr>
+    {% endfor %}
+    <tr><th>liveExecutionVerified</th><td><code>{{ "true" if ov.liveExecutionVerified else "false" }}</code></td><td>적격 원본 관측·위험 검증·체결 저장·이후 감사 통과 시에만 true</td></tr>
+    <tr><th>모의판단 엔진</th><td>{% if ov.engine_state[0] == "운영 오류" %}<span class="chip bad">{{ ov.engine_state[0] }}</span>{% elif ov.engine_state[0] == "정상 대기" %}<span class="chip ok">{{ ov.engine_state[0] }}</span>{% else %}<span class="chip warn">{{ ov.engine_state[0] }}</span>{% endif %}</td><td>{{ ov.engine_state[1] }}</td></tr>
+  </table></div>
+</section>
+
+<div class="grid-2">
+<section class="card">
+  <h2>공급자 설정 <small class="muted">(값은 표시하지 않음)</small></h2>
+  <div class="table-wrap"><table>{% for k, v in keys.items() %}<tr><td><code>{{ k }}</code></td><td>{% if v %}<span class="chip ok">설정됨</span>{% else %}<span class="chip warn">연결 필요</span>{% endif %}</td></tr>{% endfor %}
+    <tr><td>당일 종목별 수급</td><td><span class="chip warn">연결 필요</span> <small>요건 충족 공급자 없음</small></td></tr>
+    <tr><td>서울 외환시장 환율</td><td><span class="chip warn">연결 필요</span></td></tr></table></div>
+</section>
+<section class="card">
+  <h2>공급자별 최근 결과</h2>
+  {% if providers %}<div class="table-wrap"><table><tr><th>공급자·작업</th><th>최근</th><th>마지막 성공</th></tr>
+  {% for p in providers %}<tr><td>{{ p.provider }} · <small>{{ p.operation }}</small></td><td>{{ status_chip(p.last.status) }}<br><small>{{ p.last.requested_at | kst }}</small></td>
+    <td>{{ p.last_ok.requested_at | kst if p.last_ok else "없음" }}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">호출 기록이 없습니다.</div>{% endif %}
+</section>
+</div>
+
+<section class="card" id="jobs">
+  <h2>예약 작업</h2>
+  <div class="table-wrap"><table><tr><th>작업</th><th>마지막 성공</th><th>다음 예정</th><th></th></tr>
+  {% for name, spec in jobs.items() %}<tr><td>{{ spec.label }} <small class="mono muted">{{ name }}</small><br><small class="muted">권한: {{ spec.scopes | join(", ") }}</small></td>
+    <td>{{ last_success[name] | kst if last_success[name] else "없음" }}</td>
+    <td>{{ next_runs.get(name, "정규장 중 자동(" ~ schedule.engine_interval_min ~ "분)" if name == "paper_engine" else ("정시(" ~ schedule.intraday_audit_hours | join(",") ~ "시)" if name == "intraday_audit" else "")) }}</td>
+    <td><form method="post" action="/admin/jobs/run"><input type="hidden" name="csrf_token" value="{{ csrf }}"><input type="hidden" name="job" value="{{ name }}"><button class="secondary" type="submit">지금 실행</button></form></td></tr>{% endfor %}
+  </table></div>
+  <form class="inline" method="post" action="/admin/schedule">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>개장 전 브리핑 <input name="pre_brief_time" placeholder="HH:MM" value="{{ schedule.pre_brief_time or '' }}" size="6"></label>
+    <label>마감 후 브리핑 <input name="close_brief_time" placeholder="HH:MM" value="{{ schedule.close_brief_time or '' }}" size="6"></label>
+    <label>모의운용 정산 <input name="settlement_time" placeholder="HH:MM" value="{{ schedule.settlement_time or '' }}" size="6"></label>
+    <button type="submit">예약 시각 저장</button>
+  </form>
+  <small class="muted">비워 두면 해당 작업은 예약되지 않습니다. worker 프로세스(<code>python -m app.worker</code>)가 실행 중이어야 예약이 동작합니다.</small>
+  <details><summary>최근 실행 {{ runs | length }}건 · 잠금 {{ locks | length }}개</summary>
+    <div class="table-wrap"><table><tr><th>작업</th><th>슬롯(멱등성 키)</th><th>상태</th><th>시도</th><th>시작–완료</th><th>요약·오류</th></tr>
+    {% for r in runs %}<tr><td>{{ r.job_name }}</td><td class="mono">{{ r.slot_key }}</td><td>{{ status_chip(r.status) }}</td><td>{{ r.attempts }}</td>
+      <td><small>{{ r.started_at | kst }}<br>{{ r.finished_at | kst }}</small></td>
+      <td><details><summary>보기</summary><pre class="mono">{{ (r.error or (r.summary | tojson(indent=2))) }}</pre></details></td></tr>{% endfor %}</table></div>
+    {% for l in locks %}<p class="mono"><small>{{ l.name }} — {{ l.holder }} (만료 {{ l.expires_at | kst }})</small></p>{% endfor %}
+  </details>
+</section>
+
+<section class="card" id="calendar">
+  <h2>거래소 캘린더</h2>
+  <p>오늘 {{ today }}: {% if today_info.status == "trading" %}<span class="chip ok">거래일</span>{% elif today_info.status == "closed" %}<span class="chip">휴장</span>{% else %}<span class="chip bad">미확인</span>{% endif %} {{ today_info.reason }}</p>
+  {% if years %}<div class="table-wrap"><table><tr><th>연도</th><th>상태</th><th>정규장</th><th>공지</th></tr>
+  {% for y in years %}<tr><td>{{ y.year }}</td><td>{{ "확인됨" if y.confirmed else "미확인" }} <small>{{ y.confirmed_at | kst }}</small></td><td>{{ y.regular_open }}–{{ y.regular_close }}</td>
+    <td><a href="{{ y.source_url }}" target="_blank" rel="noopener noreferrer">출처</a></td></tr>{% endfor %}</table></div>{% endif %}
+  <details {% if today_info.status == "unknown" %}open{% endif %}><summary>연도 휴장일 목록 등록(공식 공지 확인 후)</summary>
+    <form class="stack" method="post" action="/admin/calendar/year">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <div class="grid"><label>연도 <input name="year" inputmode="numeric" required value="{{ today.year }}"></label>
+        <label>정규장 시작 <input name="open" value="09:00"></label><label>정규장 종료 <input name="close" value="15:30"></label></div>
+      <label>KRX 공식 공지 URL <input name="source_url" type="url" required placeholder="https://..."></label>
+      <label>휴장일 (YYYY-MM-DD, 쉼표 또는 줄바꿈 구분) <textarea name="holidays"></textarea></label>
+      <small class="muted">이 목록을 공식 공지로 직접 확인했을 때만 등록하세요. 주말은 자동으로 휴장 처리됩니다.</small>
+      <button type="submit">확인됨으로 등록</button></form></details>
+  <details><summary>임시휴장·특별 거래시간 추가</summary>
+    <form class="inline" method="post" action="/admin/calendar/exception">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <label>날짜 <input type="date" name="day" required></label>
+      <label>종류 <select name="kind"><option value="closure">임시휴장</option><option value="special_hours">특별 거래시간</option><option value="holiday">휴장</option></select></label>
+      <label>시작 <input name="open_time" placeholder="10:00" size="5"></label><label>종료 <input name="close_time" placeholder="15:30" size="5"></label>
+      <label>공지 URL <input name="source_url" type="url" required></label><label>메모 <input name="note"></label>
+      <button type="submit">추가</button></form>
+    {% for e in exceptions %}<small class="mono">{{ e.day }} {{ e.kind }} {{ e.open_time or "" }}–{{ e.close_time or "" }} {{ e.note or "" }}</small><br>{% endfor %}
+  </details>
+</section>
+
+<div class="grid-2">
+<section class="card">
+  <h2>데이터 동기화</h2>
+  <form class="inline" method="post" action="/admin/official/sync"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>KRX 공식 일별 가격 <input type="date" name="day" required value="{{ today }}"></label><button type="submit">동기화</button></form>
+  <form class="inline" method="post" action="/admin/dart/corp-codes"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button class="secondary" type="submit">DART 고유번호 매핑 동기화</button></form>
+  <h3>종목 정보 보정</h3>
+  <form class="stack" method="post" action="/admin/instrument"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="grid"><label>종목코드 <input name="code" required maxlength="6"></label><label>업종 <input name="sector"></label></div>
+    <label class="check"><input type="checkbox" name="managed_issue"> 관리종목·거래정지 등 위험</label>
+    <label class="check"><input type="checkbox" name="is_etf"> ETF(기업 공시·9항목 미적용)</label>
+    <button class="secondary" type="submit">저장</button></form>
+</section>
+<section class="card">
+  <h2>네이버 원본 검증 기준</h2>
+  <p>{% if naver.confirmed_by_owner %}<span class="chip ok">소유자 확정</span>{% else %}<span class="chip warn">미확정 — 모의체결 근거로 쓰지 않음</span>{% endif %}</p>
+  <p class="muted"><small>먼저 서버에서 <code>python -m app.cli probe-naver 005930</code>로 실제 응답 필드를 확인한 뒤 허용값을 확정하세요.
+    <code>overMarketPriceInfo</code>, <code>integratedPriceInfo</code>는 가격으로 쓰지 않습니다.</small></p>
+  <form class="stack" method="post" action="/admin/naver/confirm"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>허용 장 상태 ({{ naver.market_status_field }}) <input name="allowed_market_status" value="{{ naver.allowed_market_status | join(',') }}"></label>
+    <label>허용 세션 ({{ naver.session_type_field }}) <input name="allowed_session_types" value="{{ naver.allowed_session_types | join(',') }}"></label>
+    <label>허용 거래소 코드 ({{ naver.exchange_type_field }}) <input name="allowed_exchange_codes" value="{{ naver.allowed_exchange_codes | join(',') }}"></label>
+    <label class="check"><input type="checkbox" name="confirmed" {% if naver.confirmed_by_owner %}checked{% endif %}> 실제 응답으로 확인했고 이 기준을 확정합니다</label>
+    <button class="secondary" type="submit">저장</button></form>
+</section>
+</div>
+
+<section class="card">
+  <h2>출처 등록</h2>
+  <form class="stack" method="post" action="/admin/sources"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="grid"><label>URL <input name="url" type="url" required></label><label>제목 <input name="title" required></label>
+      <label>제공처 <input name="provider" required placeholder="DART, 회사 IR, 연합뉴스…"></label>
+      <label>등급 <select name="grade"><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+      <label>원출처 키 <input name="origin_key" placeholder="같은 보도자료 재전재면 같은 값"></label>
+      <label>확인 시각(KST) <input type="datetime-local" name="checked_at" required></label>
+      <label>발행 시각(선택) <input type="datetime-local" name="published_at"></label>
+      <label>참조 이름(선택) <input name="ref" maxlength="100" placeholder="예: samsung-q3-ir"></label></div>
+    <small class="muted">참조 이름을 붙이면 번호가 정해지기 전에도 다른 입력에서 <code>ref:이름</code>으로 이 출처를 가리킬 수 있습니다(편집기 모드에서 유용).</small>
+    <label class="check"><input type="checkbox" name="is_company_claim"> 기업 공식자료(경영진 주장일 수 있음)</label>
+    <label>메모 <input name="note"></label>
+    <button class="secondary" type="submit">출처 등록</button></form>
+  <details><summary>최근 출처 {{ sources | length }}건</summary>
+    {% for s in sources %}<small>#{{ s.id }}{% if s.ref_key %} <code>ref:{{ s.ref_key }}</code>{% endif %} <span class="grade">{{ s.grade }}</span> {{ s.title }} — {{ s.provider }} · {{ s.origin_key[:40] }}</small><br>{% endfor %}</details>
+</section>
+
+<section class="card">
+  <h2>모의운용 원장 점검</h2>
+  {% if exps %}<div class="table-wrap"><table><tr><th>실험</th><th>상태</th><th>해시 체인</th></tr>
+  {% for e in exps %}<tr><td><a href="/paper/{{ e.id }}">#{{ e.id }} {{ e.name }}</a></td><td>{{ status_chip(e.status) }}</td>
+    <td>{% if integrity[e.id][0] %}<span class="chip ok">{{ integrity[e.id][1] }}</span>{% else %}<span class="chip bad">{{ integrity[e.id][1] }}</span>{% endif %}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="empty">실험이 없습니다.</div>{% endif %}
+  <h3>운영 오류·미체결·정산 대기 사유</h3>
+  {% if ops %}<ul>{% for o in ops %}<li><small>{{ o.at | kst }} · 실험 #{{ o.experiment_id }} · {{ o.type }} — {{ o.payload.reason }}</small></li>{% endfor %}</ul>
+  {% else %}<div class="empty">기록 없음</div>{% endif %}
+  <h3>최근 판단의 후보 제외 사유</h3>
+  {% if decisions %}{% for d in decisions %}<details><summary>{{ d.at | kst }} · 실험 #{{ d.experiment_id }}</summary>
+    <ul>{% for x in d.payload.exclusions %}<li>{{ x.code }}: {{ x.unmet | join(", ") }}</li>{% endfor %}
+    {% for x in d.payload.rejected %}<li>{{ x.code }}: {{ x.reason }}</li>{% endfor %}</ul></details>{% endfor %}
+  {% else %}<div class="empty">판단 기록이 없습니다.</div>{% endif %}
+</section>
+
+<div class="grid-2">
+<section class="card">
+  <h2>가져오기·내보내기</h2>
+  <p><a class="btn secondary" href="/api/export" download="signal-ledger-export.json">호환 JSON 내보내기</a></p>
+  <form class="stack" method="post" action="/admin/import" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>종류 <select name="kind"><option value="briefs">briefs.json (과거 원장)</option><option value="holdings">보유종목 JSON</option></select></label>
+    <label>파일 <input type="file" name="file" accept=".json,application/json" required></label>
+    <label class="check"><input type="checkbox" name="apply"> 실제로 적용(체크 안 하면 미리보기만)</label>
+    <button class="secondary" type="submit">가져오기</button></form>
+  <small class="muted">과거 기록은 읽기 전용으로 저장되며 신규 통계·연구 통과·체결 인증에 소급 반영되지 않습니다. 적용 전에 DB를 자동 백업합니다.</small>
+  {% for i in imports %}<details><summary>{{ i.created_at | kst }} · {{ i.filename }} · {{ i.status }}</summary><pre class="mono">{{ i.report | tojson(indent=2) }}</pre></details>{% endfor %}
+</section>
+<section class="card">
+  <h2>백업·복구</h2>
+  <form method="post" action="/admin/backup"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="secondary" type="submit">지금 백업 + 복구 검증</button></form>
+  {% if backups %}<ul>{% for b in backups %}<li class="mono"><small>{{ b.name }}</small></li>{% endfor %}</ul>
+  {% else %}<div class="empty">백업 파일이 없습니다.</div>{% endif %}
+  <small class="muted">복구는 웹서버·worker를 멈춘 뒤 <code>python -m app.cli restore &lt;파일&gt;</code>로 실행합니다(guide/BACKUP.md).</small>
+</section>
+</div>
+
+<details><summary>최근 공급자 호출 {{ fetches | length }}건</summary>
+  <div class="table-wrap"><table><tr><th>시각</th><th>공급자·작업</th><th>상태</th><th>HTTP</th><th>건수</th><th>설명</th></tr>
+  {% for f in fetches %}<tr><td><small>{{ f.requested_at | kst }}</small></td><td>{{ f.provider }} · {{ f.operation }}</td><td>{{ status_chip(f.status) }}</td><td>{{ f.http_status or "" }}</td><td>{{ f.record_count }}</td><td><small>{{ f.detail }}</small></td></tr>{% endfor %}</table></div></details>
+<details><summary>감사 로그 최근 {{ audits | length }}건</summary>
+  <div class="table-wrap"><table><tr><th>시각</th><th>주체</th><th>행동</th><th>대상</th></tr>
+  {% for a in audits %}<tr><td><small>{{ a.at | kst }}</small></td><td>{{ a.actor }}</td><td>{{ a.action }}</td><td>{{ a.target or "" }}</td></tr>{% endfor %}</table></div></details>
+{% endblock %}

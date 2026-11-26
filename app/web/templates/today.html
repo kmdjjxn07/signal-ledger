@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "macros.html" import briefing_body, status_chip %}
+{% block title %}오늘의 브리핑 · 시그널 원장{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>오늘의 브리핑</h1>
+    <div class="muted">{{ today.isoformat() }} ·
+      {% if info.status == "trading" %}KRX 거래일 (정규장 {{ info.open_time.strftime('%H:%M') }}–{{ info.close_time.strftime('%H:%M') }}){% if info.reason %} · {{ info.reason }}{% endif %}
+      {% elif info.status == "closed" %}휴장 — {{ info.reason }}
+      {% else %}<span class="chip warn">캘린더 미확인</span> {{ info.reason }}{% endif %}
+    </div>
+  </div>
+</div>
+<p class="disclaimer">확인된 사실 → 해석 → 다음 확인 → 출처 순서로 보여줍니다. 해석과 AI 제안은 사실이 아닙니다. 투자 권유가 아닙니다.</p>
+
+{% if info.status == "unknown" %}
+<div class="notice warn">올해 KRX 휴장일 목록이 공식 자료로 확인되지 않아 예약 작업(브리핑·판정·모의운용)이 멈춰 있습니다.
+  {% if static_site %}소유자가 공식 공지를 확인해 등록하면 다시 동작합니다.{% else %}<a href="/admin#calendar">관리·운영 → 거래소 캘린더</a>에서 등록하세요.{% endif %}</div>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card" aria-labelledby="pre-h">
+    <h2 id="pre-h">개장 전 브리핑 {% if pre %}{{ status_chip("published") }}{% elif pre_any %}{{ status_chip(pre_any.status) }}{% endif %}</h2>
+    {% if pre %}
+      <small class="muted">발행 {{ pre.published_at | kst }} · v{{ pre.version }} · <a href="/briefing/{{ pre.id }}">판 기록</a></small>
+      {{ briefing_body(pre, sources) }}
+    {% elif pre_any and pre_any.status == "withheld" %}
+      <div class="notice warn">검증된 사실이 없어 정식 발행하지 않았습니다. <a href="/briefing/{{ pre_any.id }}">부분 확인 내용·데이터 상태 보기</a></div>
+    {% elif pre_any %}
+      <div class="empty">{{ pre_any.status | status_ko }} 상태의 판만 있습니다. <a href="/briefing/{{ pre_any.id }}">보기</a></div>
+    {% else %}
+      <div class="empty">오늘 개장 전 브리핑이 아직 없습니다.</div>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="close-h">
+    <h2 id="close-h">장 마감 후 브리핑 {% if close %}{{ status_chip("published") }}{% elif close_any %}{{ status_chip(close_any.status) }}{% endif %}</h2>
+    {% if close %}
+      <small class="muted">발행 {{ close.published_at | kst }} · v{{ close.version }} · <a href="/briefing/{{ close.id }}">판 기록</a></small>
+      {{ briefing_body(close, sources) }}
+    {% elif close_any and close_any.status == "scheduled" %}
+      <div class="empty">오늘 장 마감 후 발행 예정</div>
+    {% elif close_any and close_any.status == "withheld" %}
+      <div class="notice warn">필수 마감 수치가 검증되지 않아 정식 발행을 보류했습니다.
+        <a href="/briefing/{{ close_any.id }}">부분 확인 내용·데이터 상태 보기</a></div>
+    {% elif close_any %}
+      <div class="empty">{{ close_any.status | status_ko }} 상태의 판만 있습니다. <a href="/briefing/{{ close_any.id }}">보기</a></div>
+    {% else %}
+      <div class="empty">오늘 장 마감 후 브리핑 기록이 없습니다.</div>
+    {% endif %}
+    {% if last_close and not close %}
+      <details><summary>가장 최근 발행된 마감 브리핑 ({{ last_close.trading_date.isoformat() }})</summary>
+        {{ briefing_body(last_close, sources) }}</details>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

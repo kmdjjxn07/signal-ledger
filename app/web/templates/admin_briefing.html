@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}브리핑 초안 작성 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>브리핑 초안 직접 작성</h1>
+<p class="disclaimer">AI가 연결되지 않았거나 자동 작업이 보류됐을 때 소유자가 직접 작성합니다. 초안으로 저장되며, 발행 시 서버가 출처를 다시 검사합니다.
+  사실은 반드시 등록된 출처 번호와 연결해야 하고, D등급은 사실로 발행할 수 없습니다.</p>
+<form class="stack card" method="post" action="/admin/briefing">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <div class="grid">
+    <label>거래일 <input type="date" name="trading_date" required value="{{ today }}"></label>
+    <label>종류 <select name="kind"><option value="pre">개장 전</option><option value="close">장 마감 후</option></select></label>
+    <label>시장 국면 <input name="regime"></label>
+  </div>
+  <label>핵심 요약 <textarea name="summary"></textarea></label>
+  <label>확인된 사실 — 한 줄에 하나: <code>내용 | 값 | 출처번호</code> <textarea name="facts" placeholder="코스피 종가(KRX) | 2,650.32 | 12"></textarea></label>
+  <label>해석(한 줄에 하나) <textarea name="interpretations"></textarea></label>
+  <label>반대 시나리오(한 줄에 하나) <textarea name="counter"></textarea></label>
+  <label>다음 확인 조건(한 줄에 하나) <textarea name="next_checks"></textarea></label>
+  <label class="check"><input type="checkbox" name="close_verified"> (마감 브리핑) KRX 공식 마감 지수·거래량·거래대금을 A등급 출처로 확인함</label>
+  <button type="submit">초안 저장</button>
+</form>
+{% endblock %}

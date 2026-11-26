@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_chip %}
+{% block title %}{{ exp.name }} · 모의투자 · 시그널 원장{% endblock %}
+{% block content %}
+<h1>{{ exp.name }} {{ status_chip(exp.status) }}</h1>
+<p class="disclaimer">가상 자금 실험 · 실행 권한: <code>{{ exp.execution_owner }}</code> · 원장 해시 체인
+  {% if chain_ok %}<span class="chip ok">{{ chain_msg }}</span>{% else %}<span class="chip bad">{{ chain_msg }}</span>{% endif %}
+  <small>(변조 탐지용이며 내용의 사실성을 보증하지 않음)</small></p>
+
+<div class="grid">
+  <section class="card"><h2>설정 {% if exp.config_locked_at %}<span class="chip">잠김</span>{% endif %}</h2>
+    <dl class="kv">
+      <dt>가상 자본</dt><dd>{{ exp.initial_capital | krw }}</dd>
+      <dt>운용 기간</dt><dd>{{ exp.duration_trading_days }}거래일</dd>
+      <dt>최대 보유</dt><dd>{{ exp.max_positions }}종목</dd>
+      <dt>종목당 최대</dt><dd>{{ exp.max_position_bp / 100 }}%</dd>
+      <dt>거래비용</dt><dd>{{ exp.cost_bps }}bp</dd>
+      <dt>시작일</dt><dd>{{ exp.start_date or "첫 실제 판단 거래일(미정)" }}</dd>
+      <dt>종료일</dt><dd>{{ exp.end_date or "—" }}</dd>
+    </dl></section>
+  <section class="card"><h2>현재 상태 <small class="muted">(원장 재생 계산)</small></h2>
+    <dl class="kv">
+      <dt>현금</dt><dd>{{ st.cash | krw }}</dd>
+      <dt>누적 거래비용</dt><dd>{{ st.total_cost | krw }}</dd>
+      <dt>판단 / 체결</dt><dd>{{ st.decisions }} / {{ st.fills }}</dd>
+      <dt>미체결 주문</dt><dd>{{ st.open_orders | length }}</dd>
+      <dt>NAV(공식 종가)</dt><dd>{% if nav is not none %}{{ nav | krw }}{% elif not st.held %}{{ st.cash | krw }}{% else %}<span class="chip warn">일부 종목 공식 종가 없음</span>{% endif %}</dd>
+    </dl>
+    <small class="muted">NAV는 KRX 공식 종가 기준입니다. 장중 참고 시세로 NAV를 확정하지 않습니다.</small></section>
+</div>
+
+<h2>포지션</h2>
+{% if st.held %}
+<div class="table-wrap"><table><tr><th>종목</th><th class="num">수량</th><th class="num">매수금액</th><th class="num">공식 종가</th><th>무효화 가격</th><th>구분</th></tr>
+{% for p in st.held %}<tr><td class="mono">{{ p.code }}</td><td class="num">{{ p.quantity }}</td><td class="num">{{ p.cost_basis | krw }}</td>
+  <td class="num">{% if marks.get(p.code) %}{{ marks[p.code].close | krw }} <small>{{ marks[p.code].trading_date }}</small>{% else %}확인 안 됨{% endif %}</td>
+  <td>{{ p.invalidation_price | krw if p.invalidation_price else "—" }}</td><td>{{ "탐색" if p.exploration else "핵심" }}</td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="empty">보유 포지션이 없습니다.</div>{% endif %}
+
+<h2>운용 로그 <small class="muted">(append-only, {{ evs | length }}건)</small></h2>
+{% if evs %}
+<div class="table-wrap"><table><tr><th>#</th><th>유형</th><th>시각</th><th>내용</th></tr>
+{% for e in evs | reverse %}<tr><td>{{ e.seq }}</td><td>{{ {"lifecycle": "상태 전이", "decision": "판단", "order": "주문", "fill": "체결", "cancel": "취소", "expiry": "만료",
+          "nav": "NAV", "settlement": "정산", "ops_error": "운영 오류", "position_review": "포지션 점검"}.get(e.type, e.type) }}</td><td>{{ e.at | kst }}</td>
+  <td>
+    {% if e.type == "ops_error" %}<span class="chip bad">운영 오류</span> {{ e.payload.reason }}
+    {% elif e.type == "decision" %}매수 {{ e.payload.buys | length }} · 매도 {{ e.payload.sells | length }} · 제외 {{ e.payload.exclusions | length }}
+      {% if e.payload.cash_only_reason %} · 현금 유지: {{ e.payload.cash_only_reason }}{% endif %}
+    {% elif e.type == "order" %}{{ "매수" if e.payload.side == "buy" else "매도" }} {{ e.payload.code }} {{ e.payload.quantity }}주 · 즉시 모의체결 정책 · 무효화 {{ e.payload.invalidation_price | krw if e.payload.invalidation_price else "—" }}
+    {% elif e.type == "position_review" %}{% for r in e.payload.reviews %}{{ r.code }}: {{ r.thesis_status }} ({{ r.catalyst_progress }}){% if not loop.last %} · {% endif %}{% endfor %}
+    {% elif e.type == "fill" %}{{ "매수" if e.payload.side == "buy" else "매도" }} {{ e.payload.code }} {{ e.payload.quantity }}주 @ {{ e.payload.fill_price | krw }} (비용 {{ e.payload.cost | krw }}, 관측 #{{ e.payload.observation_id }})
+    {% elif e.type in ("expiry", "cancel") %}{{ e.payload.order_id }} — {{ e.payload.reason }}
+    {% elif e.type == "lifecycle" %}상태 → {{ e.payload.status }}
+    {% elif e.type == "settlement" %}공식 NAV {{ e.payload.official_nav | krw }} · 비용 후 수익률 {{ e.payload.return_after_cost_pct | pct }}
+    {% else %}{{ e.type }}{% endif %}
+    <details><summary>원문</summary><pre class="mono">{{ e.payload | tojson(indent=2) }}</pre><small class="mono">hash {{ e.hash[:16] }}…</small></details>
+  </td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="empty">기록이 없습니다.</div>{% endif %}
+
+{% if exp.status not in ("검증완료", "폐기") and not exp.is_imported_readonly %}
+<details><summary>실험 폐기</summary>
+  <form class="stack" method="post" action="/admin/experiments/{{ exp.id }}/discard">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>폐기 사유 <input name="reason" required></label>
+    <button class="danger" type="submit">폐기(원장은 보존, 재활성화 불가)</button></form>
+</details>
+{% endif %}
+{% endblock %}

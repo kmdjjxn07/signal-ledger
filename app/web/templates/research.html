@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "macros.html" import status_chip, outcome, direction %}
+{% block title %}Research & Theses · 시그널 원장{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Research &amp; Theses</h1>
+  <div><a class="btn secondary" href="/admin/research/new">심층검증 작성</a> <a class="btn" href="/admin/hypothesis/new">가설 발행</a></div></div>
+<p class="disclaimer">가설은 반증 가능한 기록입니다. 품질점수는 성공확률이 아닙니다. 가격변동은 비용·배당 전이며 실제 체결수익과 다릅니다.</p>
+
+<section class="card">
+  <h2>현재 심층검증 후보</h2>
+  {% if cand %}
+    <p><a href="/research/{{ cand.code }}"><strong>{{ cand.code }}</strong></a> {{ status_chip(cand.status) }}
+      · 확인 항목 {{ cand.fully_verified_items }}/9 · 핵심 통과 {{ "예" if cand.core_passed else "아니오" }} · 검증 {{ cand.checked_at | kst }}</p>
+  {% else %}
+    <div class="empty">현재 통과한 후보가 없습니다(관찰 보류). 근거를 채우지 못한 기업을 억지로 추천하지 않습니다.</div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>가설 성과 <small class="muted">absolute-price-v1 · {{ today.isoformat() }} 기준</small></h2>
+  <div class="grid">
+  {% for hz, label in (("short", "단기"), ("medium", "중기")) %}
+    {% set a = stats[hz]["all"] %}
+    <div>
+      <h3>{{ label }} 전체</h3>
+      <dl class="kv">
+        <dt>적중률</dt><dd>{% if a.hit_rate is none %}<span class="muted">표본 없음</span>{% else %}{{ a.hit_rate }}%{% endif %}
+          {% if a.tracking %} <span class="chip warn">추적 중 (표본 {{ a.sample }}/20)</span>{% endif %}</dd>
+        <dt>적중 / 실패 / 보합</dt><dd>{{ a.hit }} / {{ a.miss }} / {{ a.flat }}</dd>
+        <dt>판정 보류</dt><dd>{{ a.pending }}{% if a.pending_reasons %} <small>({{ a.pending_reasons | join("; ") }})</small>{% endif %}</dd>
+        <dt>판정일 미도래</dt><dd>{{ a.not_due }}</dd>
+        <dt>평균 가격변동</dt><dd>{{ direction(a.avg_change) }}</dd>
+        <dt>방향 기준 평균 불리 변동</dt><dd>{{ a.avg_adverse | pct if a.avg_adverse is not none else "—" }}</dd>
+      </dl>
+      {% for tier in ("Core", "Exploration") %}{% set t = stats[hz][tier] %}
+        <small class="muted">{{ tier }}: 적중률 {{ (t.hit_rate ~ "%") if t.hit_rate is not none else "—" }} (표본 {{ t.sample }}){% if t.tracking %} · 추적 중{% endif %}</small><br>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  </div>
+  <p class="muted"><small>탐색(Exploration) 비중: {{ stats.exploration_share.count }}/{{ stats.exploration_share.total }} — {{ stats.exploration_share.basis }}.
+    보합은 평균에 포함하고 적중률 분모에서 제외합니다. 판정일 공식 종가가 없으면 보류하며 다른 날 가격으로 대체하지 않습니다.</small></p>
+</section>
+
+<h2>투자 가설</h2>
+{% if hyps %}
+<div class="table-wrap"><table>
+  <tr><th>ID</th><th>종목</th><th>방향</th><th>등급·점수</th><th>기준가</th><th>단기</th><th>중기</th><th>상태</th></tr>
+  {% for h in hyps %}
+  <tr>
+    <td class="mono">{{ h.uid }}</td>
+    <td><a href="/research/{{ h.code }}">{{ h.name }}</a> <small class="mono">{{ h.code }}</small></td>
+    <td>{{ "상승" if h.direction == "up" else "하락" }}</td>
+    <td>{{ h.quality_tier }} · {{ h.quality_score }}점 · 확신도 {{ h.confidence }}</td>
+    <td class="num">{{ h.base_price | krw }}<br><small>{{ h.base_date.isoformat() }}</small></td>
+    <td>{{ h.short_date.isoformat() }}<br>{{ outcome(ev[h.id].short) }} {% if ev[h.id].short and ev[h.id].short.change_pct %}{{ direction(ev[h.id].short.change_pct) }}{% endif %}</td>
+    <td>{{ h.medium_date.isoformat() }}<br>{{ outcome(ev[h.id].medium) }} {% if ev[h.id].medium and ev[h.id].medium.change_pct %}{{ direction(ev[h.id].medium.change_pct) }}{% endif %}</td>
+    <td>{{ status_chip(h.status) }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="empty">발행된 가설이 없습니다. 심층검증 통과 → 발행 gate 통과 순서로만 발행됩니다.</div>{% endif %}
+
+<h2>최근 심층검증 판</h2>
+{% if recent %}
+<div class="table-wrap"><table>
+  <tr><th>판</th><th>종목</th><th>상태</th><th>확인 항목</th><th>미달 이유</th><th>검증</th></tr>
+  {% for r in recent %}<tr><td>#{{ r.id }}{% if r.is_current_candidate %} <span class="chip ok">현재 후보</span>{% endif %}</td>
+    <td><a href="/research/{{ r.code }}">{{ r.code }}</a></td><td>{{ status_chip(r.status) }}</td><td>{{ r.fully_verified_items }}/9</td>
+    <td><small>{{ r.failed_reasons | join(" · ") }}</small></td><td>{{ r.checked_at | kst }}</td></tr>{% endfor %}
+</table></div>
+{% else %}<div class="empty">작성된 심층검증이 없습니다.</div>{% endif %}
+
+{% if legacy_rel %}
+<h2>과거 상대성과 기록 (legacyRelative) <small class="muted">— 신규 통계에 포함하지 않음</small></h2>
+<details><summary>{{ legacy_rel | length }}건 보기</summary>
+{% for l in legacy_rel %}<pre class="mono">{{ l.payload | tojson(indent=2) }}</pre>{% endfor %}</details>
+{% endif %}
+{% endblock %}

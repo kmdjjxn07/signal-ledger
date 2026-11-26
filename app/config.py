@@ -61,6 +61,8 @@ class Settings:
 
     http_timeout_sec: float = field(default_factory=lambda: float(_env("SL_HTTP_TIMEOUT", "8")))
 
+    # 공개 상태 파일 중 공급자 자료(종목·KRX 가격·시세)를 암호화하는 열쇠. GitHub Secrets와 내 .env에만 둔다.
+    state_key: str = field(default_factory=lambda: _env("SL_STATE_KEY", "").strip())
     # direct: 화면 입력을 내 DB에 바로 반영 / editor: inbox/ 제출 파일로 저장(공개 원장은 GitHub 실행기만 씀)
     mode: str = field(default_factory=lambda: _env("SL_MODE", "direct").strip().lower())
 

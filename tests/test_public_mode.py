@@ -19,6 +19,7 @@ import pytest
 from tests.conftest import add_instrument, add_price, add_source
 
 D = date(2026, 11, 24)
+KEY = "x" * 43 + "="  # 시험용 Fernet 열쇠(32바이트 base64)
 
 
 def _db_file() -> Path:
@@ -63,12 +64,12 @@ def test_state_dump_excludes_private_rows_and_roundtrips(calendar_2026, tmp_path
     assert "'000660'" not in prices  # 기록이 없는 종목(=내 보유종목) 가격은 공개 상태에 남기지 않음
 
     state = tmp_path / "state"
-    first = write_state(_db_file(), state)
+    first = write_state(_db_file(), state, key=KEY)
     assert "ledger.sql" in first["changed"]
-    assert write_state(_db_file(), state)["changed"] == []  # 같은 DB → 같은 파일(결정적)
+    assert write_state(_db_file(), state, key=KEY)["changed"] == []  # 같은 DB → 같은 파일(결정적)
 
     restored = tmp_path / "restored.db"
-    restore(state, restored)
+    restore(state, restored, KEY)
     con = sqlite3.connect(restored)
     try:
         assert con.execute("SELECT count(*) FROM users").fetchone()[0] == 0
@@ -273,3 +274,49 @@ def test_static_app_refuses_private_paths(calendar_2026):
         assert c.get(path).status_code == 404, path
     assert c.post("/admin/sources").status_code == 404
     assert c.get("/status").status_code == 200
+
+
+# ---------------------------------------------------------------- 공급자 자료 암호화(KRX 약관: 제3자 제공 금지)
+
+def test_provider_tables_encrypted_in_public_state(calendar_2026, tmp_path):
+    from app.state import StateKeyError, restore, write_state
+    db = calendar_2026
+    _seed_private_and_public(db)
+    state = tmp_path / "state"
+    with pytest.raises(StateKeyError):
+        write_state(_db_file(), state)  # 열쇠 없이 공급자 자료를 평문으로 쓰지 않음
+    assert not state.exists() or not any(state.rglob("*"))
+    rep = write_state(_db_file(), state, key=KEY)
+    assert rep["encrypted"] >= 2
+    enc = sorted(p.relative_to(state).as_posix() for p in state.rglob("*.enc"))
+    assert "tables/instruments/all.sql.enc" in enc and "tables/official_prices/2026-11.sql.enc" in enc
+    public_text = "\n".join(p.read_text(encoding="utf-8") for p in state.rglob("*") if p.is_file())
+    for leaked in ("관찰전자", "70000", "INSERT INTO \"official_prices\"", "INSERT INTO \"instruments\""):
+        assert leaked not in public_text, leaked
+    assert not list(state.rglob("official_prices/*.sql"))  # 평문 파일 없음
+    with pytest.raises(StateKeyError):
+        restore(state, tmp_path / "nokey.db")
+    with pytest.raises(StateKeyError):
+        restore(state, tmp_path / "wrong.db", "y" * 43 + "=")
+    restore(state, tmp_path / "ok.db", KEY)
+    con = sqlite3.connect(tmp_path / "ok.db")
+    try:
+        assert con.execute("SELECT close FROM official_prices WHERE code='005930'").fetchone()[0] == 70_000
+        assert con.execute("SELECT name FROM instruments WHERE code='005930'").fetchone()[0] == "관찰전자"
+    finally:
+        con.close()
+    assert write_state(_db_file(), state, key=KEY)["changed"] == []  # 암호문도 내용이 같으면 다시 쓰지 않음
+
+
+def test_ci_refuses_krx_without_state_key(monkeypatch, capsys):
+    from app.ci import main
+    monkeypatch.setenv("KRX_API_KEY", "some-krx-key")
+    monkeypatch.delenv("SL_STATE_KEY", raising=False)
+    assert main(["run", "--skip-jobs"]) == 1
+    assert "SL_STATE_KEY" in capsys.readouterr().out
+
+
+def test_gen_key_is_usable():
+    from app.state import decrypt_text, encrypt_text, generate_key
+    k = generate_key()
+    assert decrypt_text(encrypt_text("안녕", k), k) == "안녕"

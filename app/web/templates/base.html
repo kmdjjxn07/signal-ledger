@@ -37,7 +37,7 @@
   {% if msg %}<div class="notice {{ 'ok' if ok else 'bad' }}" role="status">{{ msg }}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
-<footer class="site">시그널 원장은 정보 제공용 개인 연구·재점검 도구입니다. 투자 권유나 실제 주문 기능이 없으며, 모의투자는 가상 자금 실험입니다.{% if static_site %} 이 사이트의 어떤 내용도 특정 종목의 매수·매도 추천이 아닙니다. 원문 자료는 각 출처 링크에서 확인하세요.{% endif %}</footer>
+<footer class="site">시장 가격·지수 자료 출처: KRX 통계정보(한국거래소 OPEN API). 공시: 금융감독원 DART. 해외 지표: FRED(St. Louis Fed).<br>시그널 원장은 정보 제공용 개인 연구·재점검 도구입니다. 투자 권유나 실제 주문 기능이 없으며, 모의투자는 가상 자금 실험입니다.{% if static_site %} 이 사이트의 어떤 내용도 특정 종목의 매수·매도 추천이 아닙니다. 원문 자료는 각 출처 링크에서 확인하세요.{% endif %}</footer>
 <script src="/static/app.js" defer></script>
 </body>
 </html>

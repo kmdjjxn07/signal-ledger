@@ -1,6 +1,6 @@
 # 테스트 목록과 결과
 
-실행: `python -m pytest -q` (2026-11-24, Python 3.13 · Linux) → **72 passed**
+실행: `python -m pytest -q` (2026-11-24, Python 3.13 · Linux) → **76 passed**
 
 모든 테스트는 임시 SQLite에 합성 데이터만 넣고, 네트워크는 가짜 응답(httpx.MockTransport)·가짜 AI·가짜 시계로 대체합니다.
 따라서 '실제 KRX/DART/네이버/Gemini 응답과 호환되는지'는 이 테스트로 증명되지 않습니다(guide/PROVIDERS.md의 probe로 확인).
@@ -110,6 +110,10 @@ config 잠금, 공급자 미연결=운영 오류(판단 없음), 전체 즉시 �
 | `test_editor_mode_queues_instead_of_writing` | 편집기 모드: DB는 그대로, 미리 검사 통과한 입력만 제출 파일 생성, 대기 중 ref 사용 가능, 공개 원장 작업 실행 차단 |
 | `test_direct_mode_still_applies` | 직접 모드는 같은 명령 코드로 바로 반영 |
 | `test_static_site_has_no_private_or_write_elements` | 공개 사이트에 폼·관리·보유종목·비밀값·절대경로 링크 없음, 모든 화면 면책 문구, 재생성 시 변경 없음 |
+| `test_provider_tables_encrypted_in_public_state` | 종목·KRX 가격·시세 표는 열쇠 없이는 저장 거부, 공개 파일에 평문 없음, 틀린 열쇠·열쇠 없음 복원 거부, 같은 내용이면 다시 쓰지 않음 |
+| `test_ci_refuses_krx_without_state_key` | KRX 키만 있고 SL_STATE_KEY가 없으면 실행 자체를 멈춤 |
+| `test_gen_key_is_usable` | gen-key로 만든 열쇠로 암호화·복호화 |
+| `test_alembic_ini_is_ascii_for_korean_windows` | 한국어 Windows(cp949)에서 init-db가 깨지지 않도록 설정 파일은 영문만 |
 | `test_static_app_refuses_private_paths` | 공개 사이트 생성용 앱은 보유종목·관리·로그인·실시간 시세 경로를 404로 거부 |
 
 추가로 작성 환경에서 `python -m app.ci run`을 제출 파일과 함께 두 번 실행해(키 없음) 반영·거부, 상태 파일 재현성

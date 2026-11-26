@@ -14,9 +14,16 @@ GitHub Actions는 실행할 때마다 빈 컴퓨터에서 시작하므로, DB를
 
 KRX 공식 일별 가격은 기록이 인용하는 종목(가설·심층검증·모의운용 종목)과 지수만 남긴다.
 출력은 같은 DB면 항상 같은 글자가 나오도록(결정적) 만든다 → Git 변경분이 작다.
+
+공급자 자료 표(ENCRYPTED_TABLES: 종목 마스터·KRX 공식 가격·참고 시세 관측)는 암호화해서 저장한다(*.sql.enc).
+KRX OPEN API 약관은 제공 자료를 제3자에게 넘기는 것을 금지하므로, 공개 저장소에서 누구나 내려받을 수 있는
+평문으로 두지 않는다. 열쇠(SL_STATE_KEY)는 GitHub Secrets와 내 컴퓨터 .env에만 둔다.
+열쇠 없이 이 표들에 행이 생기면 저장을 거부한다(평문으로 새어 나가지 않게).
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import sqlite3
 from pathlib import Path
 
@@ -33,7 +40,59 @@ PARTITIONED = {
     "official_prices": "trading_date",
 }
 
+# 공급자 자료라서 공개 저장소에는 암호문으로만 두는 표
+ENCRYPTED_TABLES = ("instruments", "official_prices", "observations")
+ENC_SUFFIX = ".enc"
+ENC_MAGIC = "SLENC1"
+
 HEADER = "-- 시그널 원장 공개 상태 파일. 손으로 고치지 마세요(app/state.py가 생성).\n"
+
+
+class StateKeyError(RuntimeError):
+    pass
+
+
+def generate_key() -> str:
+    from cryptography.fernet import Fernet
+    return Fernet.generate_key().decode("ascii")
+
+
+def _fernet(key: str):  # noqa: ANN202
+    from cryptography.fernet import Fernet
+    try:
+        return Fernet(key.strip().encode("ascii"))
+    except (ValueError, UnicodeEncodeError):
+        raise StateKeyError("SL_STATE_KEY 형식이 올바르지 않습니다. 'python -m app.ci gen-key'로 만든 값을 그대로 넣으세요.") \
+            from None
+
+
+def _mac(text: str, key: str) -> str:
+    return hmac.new(key.strip().encode("ascii"), text.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def encrypt_text(text: str, key: str) -> str:
+    """첫 줄에 내용의 HMAC(열쇠 없이는 아무것도 알 수 없음)을 적어, 내용이 같으면 파일을 다시 쓰지 않게 한다."""
+    token = _fernet(key).encrypt(text.encode("utf-8")).decode("ascii")
+    return f"{ENC_MAGIC} mac={_mac(text, key)}\n{token}\n"
+
+
+def _enc_mac(blob: str) -> str | None:
+    first = blob.split("\n", 1)[0]
+    return first.split("mac=", 1)[1].strip() if first.startswith(ENC_MAGIC) and "mac=" in first else None
+
+
+def decrypt_text(blob: str, key: str) -> str:
+    from cryptography.fernet import InvalidToken
+    head, _, token = blob.partition("\n")
+    if not head.startswith(ENC_MAGIC):
+        raise StateKeyError("암호화 상태 파일 형식이 아닙니다.")
+    try:
+        text = _fernet(key).decrypt(token.strip().encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        raise StateKeyError("SL_STATE_KEY가 이 상태 파일을 만든 열쇠와 다릅니다.") from None
+    if not hmac.compare_digest(_mac(text, key), _enc_mac(blob) or ""):
+        raise StateKeyError("암호화 상태 파일의 검증값이 맞지 않습니다(손상 가능).")
+    return text
 
 
 def _q(name: str) -> str:
@@ -92,6 +151,10 @@ def dump(db_path: Path) -> dict[str, str]:
                     cond = f"{col} IS NULL" if m == "undated" else f"substr({col}, 1, 7) = ?"
                     rows = _insert_rows(con, table, f"{where} AND {cond}", () if m == "undated" else (m,))
                     files[f"tables/{table}/{m}.sql"] = "\n".join([HEADER + "BEGIN TRANSACTION;", *rows, "COMMIT;", ""])
+            elif table in ENCRYPTED_TABLES:
+                rows = _insert_rows(con, table, where)
+                if rows:
+                    files[f"tables/{table}/all.sql"] = "\n".join([HEADER + "BEGIN TRANSACTION;", *rows, "COMMIT;", ""])
             else:
                 core += _insert_rows(con, table, where)
         core += ["COMMIT;", ""]
@@ -109,33 +172,66 @@ def scrub(text: str, secret_values: list[str]) -> str:
     return text
 
 
-def write_state(db_path: Path, state_dir: Path, secret_values: list[str] | None = None) -> dict:
-    """바뀐 파일만 쓴다. 더 이상 없는 월 파일은 지운다(행이 공개 범위에서 빠진 경우)."""
-    files = {k: scrub(v, secret_values or []) for k, v in dump(db_path).items()}
-    changed, removed = [], []
-    for rel, text in files.items():
-        p = state_dir / rel
-        if p.exists() and p.read_text(encoding="utf-8") == text:
-            continue
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8", newline="\n")
-        changed.append(rel)
+def _is_encrypted_rel(rel: str) -> bool:
+    parts = rel.split("/")
+    return len(parts) >= 3 and parts[0] == "tables" and parts[1] in ENCRYPTED_TABLES
+
+
+def _state_files(state_dir: Path) -> list[Path]:
     tables_dir = state_dir / "tables"
-    if tables_dir.exists():
-        for p in sorted(tables_dir.rglob("*.sql")):
-            rel = p.relative_to(state_dir).as_posix()
-            if rel not in files:
-                p.unlink()
-                removed.append(rel)
-    return {"changed": changed, "removed": removed, "files": len(files)}
+    if not tables_dir.exists():
+        return []
+    return sorted([*tables_dir.rglob("*.sql"), *tables_dir.rglob("*.sql" + ENC_SUFFIX)])
+
+
+def write_state(db_path: Path, state_dir: Path, secret_values: list[str] | None = None,
+                key: str | None = None) -> dict:
+    """바뀐 파일만 쓴다. 더 이상 없는 월 파일은 지운다(행이 공개 범위에서 빠진 경우).
+    공급자 자료 표는 key로 암호화한다. key가 없는데 그 표에 행이 있으면 아무것도 쓰지 않고 오류를 낸다."""
+    plain = {k: scrub(v, (secret_values or []) + ([key] if key else [])) for k, v in dump(db_path).items()}
+    need_key = sorted(rel for rel in plain if _is_encrypted_rel(rel))
+    if need_key and not key:
+        raise StateKeyError("공급자 자료(종목·가격·시세)가 있어 SL_STATE_KEY가 필요합니다. 평문으로 공개 저장소에 "
+                            "저장하지 않으려고 중단했습니다. 'python -m app.ci gen-key'로 열쇠를 만들어 "
+                            "GitHub Secrets와 .env에 넣으세요.")
+    changed, removed, expected = [], [], set()
+    for rel, text in plain.items():
+        if _is_encrypted_rel(rel):
+            rel = rel + ENC_SUFFIX
+            p = state_dir / rel
+            expected.add(rel)
+            if p.exists() and _enc_mac(p.read_text(encoding="utf-8")) == _mac(text, key):
+                continue
+            out = encrypt_text(text, key)
+        else:
+            p = state_dir / rel
+            expected.add(rel)
+            if p.exists() and p.read_text(encoding="utf-8") == text:
+                continue
+            out = text
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(out, encoding="utf-8", newline="\n")
+        changed.append(rel)
+    for p in _state_files(state_dir):
+        rel = p.relative_to(state_dir).as_posix()
+        if rel not in expected:
+            p.unlink()
+            removed.append(rel)
+    return {"changed": changed, "removed": removed, "files": len(expected),
+            "encrypted": sum(1 for r in expected if r.endswith(ENC_SUFFIX))}
 
 
 def has_state(state_dir: Path) -> bool:
     return (state_dir / "ledger.sql").exists()
 
 
-def restore(state_dir: Path, db_path: Path) -> int:
-    """상태 파일로 새 SQLite DB를 만든다(기존 파일은 덮어씀). 불러온 파일 수를 돌려준다."""
+def restore(state_dir: Path, db_path: Path, key: str | None = None) -> int:
+    """상태 파일로 새 SQLite DB를 만든다(기존 파일은 덮어씀). 불러온 파일 수를 돌려준다.
+    암호화된 파일이 있으면 key가 필요하다."""
+    files = _state_files(state_dir)
+    if any(p.name.endswith(ENC_SUFFIX) for p in files) and not key:
+        raise StateKeyError("state/에 암호화된 공급자 자료가 있습니다. .env(또는 GitHub Secrets)에 SL_STATE_KEY를 "
+                            "넣어야 복원할 수 있습니다.")
     if db_path.exists():
         db_path.unlink()
     for suffix in ("-wal", "-shm"):
@@ -148,11 +244,12 @@ def restore(state_dir: Path, db_path: Path) -> int:
     try:
         con.executescript((state_dir / "ledger.sql").read_text(encoding="utf-8"))
         n += 1
-        tables_dir = state_dir / "tables"
-        if tables_dir.exists():
-            for p in sorted(tables_dir.rglob("*.sql")):
-                con.executescript(p.read_text(encoding="utf-8"))
-                n += 1
+        for p in files:
+            text = p.read_text(encoding="utf-8")
+            if p.name.endswith(ENC_SUFFIX):
+                text = decrypt_text(text, key)
+            con.executescript(text)
+            n += 1
         con.execute("PRAGMA foreign_keys=ON")
         bad = con.execute("PRAGMA foreign_key_check").fetchall()
         problems = [r for r in bad if r[0] not in PRIVATE_TABLES]

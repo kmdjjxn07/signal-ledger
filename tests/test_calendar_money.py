@@ -59,3 +59,9 @@ def test_add_trading_days_skips_holidays_and_stops_at_unknown(calendar_2026):
     db.commit()
     with pytest.raises(CalendarUnknown):
         add_trading_days(db, date(2026, 12, 23), 10)
+
+
+def test_alembic_ini_is_ascii_for_korean_windows():
+    # alembic은 설정 파일을 시스템 기본 인코딩(한국어 Windows = cp949)으로 읽는다. 한글이 있으면 init-db가 실패한다.
+    from app.config import ROOT
+    (ROOT / "alembic.ini").read_bytes().decode("ascii")

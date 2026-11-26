@@ -54,6 +54,7 @@ jobs:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SL_STATE_KEY: ${{ secrets.SL_STATE_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || secrets.GEMINI_MODEL }}
           NAVER_QUOTE_ENABLED: ${{ vars.NAVER_QUOTE_ENABLED || 'false' }}
         run: python -m app.ci run

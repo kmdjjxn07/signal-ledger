@@ -5,6 +5,7 @@ GitHub Actions(무료, 공개 저장소)에서 서버 없이 시그널 원장을
     python -m app.ci build-site          상태 파일로 공개 사이트(_site/)만 다시 만들기 (내 컴퓨터에서 미리보기)
     python -m app.ci local-refresh       (내 컴퓨터) GitHub에서 받은 상태로 내 DB를 새로 만들기. 계정·보유종목은 보존
     python -m app.ci init-from-local     (내 컴퓨터, 처음 한 번) 지금까지 입력한 기록으로 공개 상태 파일 만들기
+    python -m app.ci gen-key             공급자 자료 암호화 열쇠(SL_STATE_KEY) 새로 만들기
 
 한 번의 실행은 '전부 저장되거나 전부 저장되지 않는다': 중간에 예기치 못한 오류로 멈추면 상태 파일을 쓰지 않으므로
 GitHub에 아무것도 커밋되지 않고, 제출 파일은 다음 실행 때 다시 처리된다.
@@ -55,7 +56,8 @@ def use_db(path: Path) -> str:
 
 def prepare_db(path: Path, state_dir: Path = STATE_DIR) -> dict:
     from app.state import has_state, restore
-    loaded = restore(state_dir, path) if has_state(state_dir) else 0
+    from app.config import get_settings
+    loaded = restore(state_dir, path, get_settings().state_key or None) if has_state(state_dir) else 0
     if not loaded:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
@@ -70,7 +72,12 @@ def prepare_db(path: Path, state_dir: Path = STATE_DIR) -> dict:
 def _secret_values() -> list[str]:
     from app.config import get_settings
     s = get_settings()
-    return [v for v in (s.krx_api_key, s.dart_api_key, s.gemini_api_key, s.fred_api_key) if v]
+    return [v for v in (s.krx_api_key, s.dart_api_key, s.gemini_api_key, s.fred_api_key, s.state_key) if v]
+
+
+def _state_key() -> str | None:
+    from app.config import get_settings
+    return get_settings().state_key or None
 
 
 # ---------------------------------------------------------------- 제출 파일
@@ -172,6 +179,16 @@ def tick(now: datetime) -> list[str]:
 # ---------------------------------------------------------------- 명령
 
 def cmd_run(args: argparse.Namespace) -> int:
+    from app.config import get_settings
+    s = get_settings()
+    if (s.krx_api_key or s.naver_quote_enabled) and not s.state_key:
+        print("[중단] KRX 키(또는 네이버 시세)가 설정됐는데 SL_STATE_KEY가 없습니다. 공급자 자료를 평문으로 공개 저장소에 "
+              "저장하지 않으려고 실행하지 않았습니다. 'python -m app.ci gen-key'로 열쇠를 만들어 GitHub Secrets에 "
+              "SL_STATE_KEY로 넣으세요.")
+        return 1
+    if s.state_key:
+        from app.state import _fernet
+        _fernet(s.state_key)  # 형식이 틀리면 여기서 바로 알림
     now = datetime.fromisoformat(args.now).astimezone(KST) if args.now else datetime.now(KST)
     db_path = _ci_db_path()
     report: dict = {"now_kst": now.isoformat(timespec="minutes"), **prepare_db(db_path)}
@@ -184,7 +201,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 report[name] = {"result": "failed", "error": f"{type(e).__name__}"}
         report["jobs"] = tick(now)
     from app.state import write_state
-    report["state"] = write_state(db_path, STATE_DIR, _secret_values())
+    report["state"] = write_state(db_path, STATE_DIR, _secret_values(), _state_key())
     from app.site import build_site
     report["site"] = build_site(SITE_DIR)
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
@@ -253,7 +270,7 @@ def cmd_init_from_local(args: argparse.Namespace) -> int:  # noqa: ARG001
         print("내 DB가 없습니다.")
         return 2
     migrate(url)
-    rep = write_state(local, STATE_DIR, _secret_values())
+    rep = write_state(local, STATE_DIR, _secret_values(), _state_key())
     print(json.dumps(rep, ensure_ascii=False, indent=2))
     print("완료: state/ 폴더가 생겼습니다. 보유종목·계정은 들어가지 않았습니다. GitHub Desktop에서 커밋·푸시하세요.")
     return 0
@@ -289,6 +306,15 @@ def refresh_holding_prices() -> dict:
     return out
 
 
+def cmd_gen_key(args: argparse.Namespace) -> int:  # noqa: ARG001
+    from app.state import generate_key
+    print("아래 한 줄이 새 SL_STATE_KEY입니다. GitHub Secrets(SL_STATE_KEY)와 내 .env 두 곳에만 넣고, 다른 곳에 적지 마세요.")
+    print("이 열쇠를 잃어버리면 암호화된 가격 기록을 다시 읽을 수 없습니다(별도로 안전하게 보관 권장).")
+    print()
+    print(generate_key())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="python -m app.ci")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -299,9 +325,15 @@ def main(argv: list[str] | None = None) -> int:
     lr = sub.add_parser("local-refresh")
     lr.add_argument("--prices", action="store_true", help="보유종목 평가용 KRX 가격도 받기(내 .env의 키 사용)")
     sub.add_parser("init-from-local")
+    sub.add_parser("gen-key")
     args = p.parse_args(argv)
-    return {"run": cmd_run, "build-site": cmd_build_site, "local-refresh": cmd_local_refresh,
-            "init-from-local": cmd_init_from_local}[args.cmd](args)
+    from app.state import StateKeyError
+    try:
+        return {"run": cmd_run, "build-site": cmd_build_site, "local-refresh": cmd_local_refresh,
+                "init-from-local": cmd_init_from_local, "gen-key": cmd_gen_key}[args.cmd](args)
+    except StateKeyError as e:
+        print(f"[중단] {e}")
+        return 1
 
 
 if __name__ == "__main__":

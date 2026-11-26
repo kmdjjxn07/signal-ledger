@@ -1,0 +1,9 @@
+{
+  "file": "20261127-000634-650958-b057-schedule-set.json",
+  "processed_at": "2026-11-27T00:07:26+09:00",
+  "ok": true,
+  "messages": [
+    "1. schedule.set: 예약 시각을 저장했습니다(저장 = 예약 등록이며 실제 성공은 작업 기록에서 확인)."
+  ],
+  "error": null
+}

@@ -1,0 +1,9 @@
+{
+  "file": "20261127-000533-222550-01a4-calendar-year.json",
+  "processed_at": "2026-11-27T00:07:26+09:00",
+  "ok": true,
+  "messages": [
+    "1. calendar.year: 2026년 캘린더를 확인됨으로 등록했습니다(휴장일 2일)."
+  ],
+  "error": null
+}

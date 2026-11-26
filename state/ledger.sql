@@ -374,4 +374,8 @@ CREATE INDEX ix_official_prices_trading_date ON official_prices (trading_date);
 CREATE INDEX ix_paper_events_experiment_id ON paper_events (experiment_id);
 CREATE INDEX ix_research_versions_code ON research_versions (code);
 INSERT INTO "alembic_version" VALUES('0002');
+INSERT INTO "calendar_exceptions" VALUES(1,'2026-12-25','holiday',NULL,NULL,'https://open.krx.co.kr/contents/MKD/01/0110/01100305/MKD01100305.jsp','공식 휴장일','2026-11-26 15:07:26.350300');
+INSERT INTO "calendar_exceptions" VALUES(2,'2026-12-31','holiday',NULL,NULL,'https://open.krx.co.kr/contents/MKD/01/0110/01100305/MKD01100305.jsp','공식 휴장일','2026-11-26 15:07:26.350303');
+INSERT INTO "calendar_years" VALUES(2026,1,'https://open.krx.co.kr/contents/MKD/01/0110/01100305/MKD01100305.jsp','2026-11-26 15:07:26.347214','09:00','15:30',NULL);
+INSERT INTO "settings" VALUES('schedule','{"pre_brief_time": "08:20", "close_brief_time": "15:50", "settlement_time": "16:10"}','2026-11-26 15:07:26.369223');
 COMMIT;

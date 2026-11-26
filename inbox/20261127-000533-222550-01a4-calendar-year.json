@@ -1,0 +1,18 @@
+{
+  "commands": [
+    {
+      "kind": "calendar.year",
+      "payload": {
+        "year": "2026",
+        "source_url": "https://open.krx.co.kr/contents/MKD/01/0110/01100305/MKD01100305.jsp",
+        "holidays": [
+          "2026-12-25",
+          "2026-12-31"
+        ],
+        "open": "09:00",
+        "close": "15:30"
+      }
+    }
+  ],
+  "submitted_at": "2026-11-27T00:05:33+09:00"
+}

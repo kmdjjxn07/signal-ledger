@@ -10,4 +10,8 @@ INSERT INTO "fetch_logs" VALUES(7,'fred','latest:DGS2','2026-11-26 23:51:00.9818
 INSERT INTO "fetch_logs" VALUES(8,'fred','latest:SP500','2026-11-26 23:51:01.184119','ok',NULL,'',NULL,0);
 INSERT INTO "fetch_logs" VALUES(9,'fred','latest:NASDAQCOM','2026-11-26 23:51:01.407499','ok',NULL,'',NULL,0);
 INSERT INTO "fetch_logs" VALUES(10,'fred','latest:DCOILWTICO','2026-11-26 23:51:01.587291','ok',NULL,'',NULL,0);
+INSERT INTO "fetch_logs" VALUES(11,'krx','stock_daily:KOSPI','2026-11-27 07:28:28.550749','not_published',NULL,'거래일이지만 아직 발행되지 않음',NULL,0);
+INSERT INTO "fetch_logs" VALUES(12,'krx','index_daily:KOSPI','2026-11-27 07:28:28.750965','not_published',NULL,'거래일이지만 아직 발행되지 않음',NULL,0);
+INSERT INTO "fetch_logs" VALUES(13,'krx','stock_daily:KOSDAQ','2026-11-27 07:28:28.978074','not_published',NULL,'거래일이지만 아직 발행되지 않음',NULL,0);
+INSERT INTO "fetch_logs" VALUES(14,'krx','index_daily:KOSDAQ','2026-11-27 07:28:29.193376','not_published',NULL,'거래일이지만 아직 발행되지 않음',NULL,0);
 COMMIT;

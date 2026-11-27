@@ -4,4 +4,5 @@ INSERT INTO "audit_logs" VALUES(1,'2026-11-26 15:07:26.349600','owner:inbox','ca
 INSERT INTO "audit_logs" VALUES(2,'2026-11-26 15:07:26.368821','owner:inbox','settings.schedule',NULL,'{"pre_brief_time": "08:20", "close_brief_time": "15:50", "settlement_time": "16:10"}');
 INSERT INTO "audit_logs" VALUES(3,'2026-11-26 15:55:58.364922','job:dart_corp_codes','dart.corp_codes',NULL,'{"updated": 0}');
 INSERT INTO "audit_logs" VALUES(4,'2026-11-26 23:51:01.593187','job:pre_brief','briefing.published','pre:2026-11-27:v1','null');
+INSERT INTO "audit_logs" VALUES(5,'2026-11-27 07:28:29.205417','job:close_brief','briefing.withheld','close:2026-11-27:v2','null');
 COMMIT;

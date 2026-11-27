@@ -5,4 +5,6 @@ INSERT INTO "job_runs" VALUES(2,'intraday_audit','2026-11-27T10:00','succeeded',
 INSERT INTO "job_runs" VALUES(3,'paper_engine','2026-11-27T10:10','succeeded',1,'2026-11-27 01:12:38.750067','2026-11-27 01:12:38.758862','{"elapsed_sec": 0.0, "timeout_exceeded": false}',NULL);
 INSERT INTO "job_runs" VALUES(4,'intraday_audit','2026-11-27T11:00','succeeded',1,'2026-11-27 02:30:27.540058','2026-11-27 02:30:27.545052','{"experiments": {}, "elapsed_sec": 0.0, "timeout_exceeded": false}',NULL);
 INSERT INTO "job_runs" VALUES(5,'paper_engine','2026-11-27T11:30','succeeded',1,'2026-11-27 02:30:27.549284','2026-11-27 02:30:27.559022','{"elapsed_sec": 0.0, "timeout_exceeded": false}',NULL);
+INSERT INTO "job_runs" VALUES(6,'intraday_audit','2026-11-27T12:00','succeeded',1,'2026-11-27 03:40:28.741222','2026-11-27 03:40:28.746178','{"experiments": {}, "elapsed_sec": 0.0, "timeout_exceeded": false}',NULL);
+INSERT INTO "job_runs" VALUES(7,'paper_engine','2026-11-27T12:40','succeeded',1,'2026-11-27 03:40:28.753734','2026-11-27 03:40:28.764056','{"elapsed_sec": 0.0, "timeout_exceeded": false}',NULL);
 COMMIT;
